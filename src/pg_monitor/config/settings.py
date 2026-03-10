@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, Mapping
+from typing import Iterator, Mapping, TypeVar
 
 from pydantic import PostgresDsn, ValidationError, field_validator
 from pydantic_settings import (
@@ -22,7 +22,7 @@ class ConfigurationError(ValueError):
     """Raised when settings cannot be resolved or validated."""
 
 
-class Settings(BaseSettings):
+class _BaseMonitorSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="PG_MONITOR_",
         extra="ignore",
@@ -31,10 +31,7 @@ class Settings(BaseSettings):
 
     app_name: str = "pg-monitor"
     environment: str = "dev"
-    host: str = "0.0.0.0"
-    port: int = 8000
     log_level: str = "INFO"
-    pg_dsn: PostgresDsn
 
     @classmethod
     def settings_customise_sources(
@@ -63,6 +60,51 @@ class Settings(BaseSettings):
         return normalized
 
 
+class ApiSettings(_BaseMonitorSettings):
+    host: str = "0.0.0.0"
+    port: int = 8000
+
+
+class CollectorSettings(_BaseMonitorSettings):
+    collector_scheduler_enabled: bool = True
+    runtime_poll_interval_seconds: int = 60
+    query_poll_interval_seconds: int = 900
+    collector_startup_retry_attempts: int = 5
+    collector_startup_retry_base_delay_seconds: float = 1.0
+    collector_startup_retry_max_delay_seconds: float = 10.0
+    pg_dsn: PostgresDsn
+
+    @field_validator(
+        "runtime_poll_interval_seconds",
+        "query_poll_interval_seconds",
+    )
+    @classmethod
+    def validate_poll_interval(cls, value: int) -> int:
+        if value <= 0:
+            msg = "poll interval must be greater than 0"
+            raise ValueError(msg)
+        return value
+
+    @field_validator("collector_startup_retry_attempts")
+    @classmethod
+    def validate_retry_attempts(cls, value: int) -> int:
+        if value <= 0:
+            msg = "collector startup retry attempts must be greater than 0"
+            raise ValueError(msg)
+        return value
+
+    @field_validator(
+        "collector_startup_retry_base_delay_seconds",
+        "collector_startup_retry_max_delay_seconds",
+    )
+    @classmethod
+    def validate_retry_delay(cls, value: float) -> float:
+        if value <= 0:
+            msg = "collector startup retry delay must be greater than 0"
+            raise ValueError(msg)
+        return value
+
+
 def resolve_settings_paths(
     environ: Mapping[str, str] | None = None,
 ) -> Path | None:
@@ -70,10 +112,15 @@ def resolve_settings_paths(
     return Path(env[DOTENV_FILE_ENV]) if DOTENV_FILE_ENV in env else None
 
 
-def load_settings(
+TSettings = TypeVar("TSettings", bound=BaseSettings)
+
+
+def _load_settings(
+    settings_cls: type[TSettings],
+    *,
     env_path: Path | None = None,
     environ: Mapping[str, str] | None = None,
-) -> Settings:
+) -> TSettings:
     env = os.environ if environ is None else environ
     resolved_env_path = resolve_settings_paths(env)
     dotenv_file = env_path or resolved_env_path or Path(DEFAULT_DOTENV_FILE)
@@ -83,11 +130,25 @@ def load_settings(
 
     try:
         with _override_environ(environ):
-            return Settings(
+            return settings_cls(
                 _env_file=dotenv_file,
             )
     except ValidationError as exc:
         raise ConfigurationError(str(exc)) from exc
+
+
+def load_api_settings(
+    env_path: Path | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> ApiSettings:
+    return _load_settings(ApiSettings, env_path=env_path, environ=environ)
+
+
+def load_collector_settings(
+    env_path: Path | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> CollectorSettings:
+    return _load_settings(CollectorSettings, env_path=env_path, environ=environ)
 
 
 @contextmanager

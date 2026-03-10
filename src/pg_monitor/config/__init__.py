@@ -1,13 +1,17 @@
 from .settings import (
+    ApiSettings,
+    CollectorSettings,
     ConfigurationError,
-    Settings,
-    load_settings,
+    load_api_settings,
+    load_collector_settings,
     resolve_settings_paths,
 )
 
 __all__ = [
+    "ApiSettings",
+    "CollectorSettings",
     "ConfigurationError",
-    "Settings",
-    "load_settings",
+    "load_api_settings",
+    "load_collector_settings",
     "resolve_settings_paths",
 ]

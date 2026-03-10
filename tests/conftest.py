@@ -4,16 +4,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from pg_monitor.app import create_app
-from pg_monitor.config import Settings
+from pg_monitor.config import ApiSettings
 
 
 @pytest.fixture
-def settings() -> Settings:
-    return Settings(pg_dsn="postgresql://user:password@localhost:5432/monitoring")
+def settings() -> ApiSettings:
+    return ApiSettings()
 
 
 @pytest.fixture
-def app(settings: Settings):
+def app(settings: ApiSettings):
     return create_app(settings)
 
 
