@@ -70,6 +70,8 @@
 uv sync
 export PG_MONITOR_PG_DSN='postgresql://user:password@localhost:5432/postgres'
 uv run python main.py
+# отдельный процесс collector scheduler:
+uv run python main_collector.py
 ```
 
 ## Конфиг (.env + env)

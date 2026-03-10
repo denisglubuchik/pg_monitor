@@ -26,6 +26,8 @@ def test_formatter_includes_context_fields() -> None:
                 "levelno": logging.INFO,
                 "levelname": "INFO",
                 "msg": "test event",
+                "runtime_interval_s": 60,
+                "query_interval_s": 900,
             }
         )
         formatter = JsonFormatter(service="pg-monitor", environment="dev")
@@ -40,3 +42,5 @@ def test_formatter_includes_context_fields() -> None:
     assert payload["request_id"] == "req-001"
     assert payload["poll_cycle_id"] == "poll-001"
     assert payload["queryid"] == "42"
+    assert payload["runtime_interval_s"] == 60
+    assert payload["query_interval_s"] == 900

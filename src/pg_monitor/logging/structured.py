@@ -47,6 +47,11 @@ class JsonFormatter(logging.Formatter):
             "db_identifier": getattr(record, "db_identifier", None),
             "duration_ms": getattr(record, "duration_ms", None),
             "error_type": getattr(record, "error_type", None),
+            "collection_profile": getattr(
+                record, "collection_profile", None
+            ),
+            "runtime_interval_s": getattr(record, "runtime_interval_s", None),
+            "query_interval_s": getattr(record, "query_interval_s", None),
             "method": getattr(record, "method", None),
             "path": getattr(record, "path", None),
             "status_code": getattr(record, "status_code", None),
