@@ -10,11 +10,11 @@ from sqlalchemy.ext.asyncio import (  # noqa: TC002
 )
 
 from pg_monitor.config import ApiSettings  # noqa: TC001
-from pg_monitor.query_analytics import QueryAnalyticsService
-from pg_monitor.runtime_metrics import (
+from pg_monitor.metrics import (
     RuntimeMetricsExporter,
     RuntimeMetricsService,
 )
+from pg_monitor.query_analytics import QueryAnalyticsService
 from pg_monitor.storage import (
     StorageUnitOfWorkFactory,
     create_storage_engine,

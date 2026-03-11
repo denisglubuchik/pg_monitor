@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from .models import RuntimeMetricsState
+    from .runtime_models import RuntimeMetricsState
 
 try:
-    from prometheus_client import CollectorRegistry, Gauge, generate_latest
+    from prometheus_client import Gauge, generate_latest
     from prometheus_client.exposition import CONTENT_TYPE_LATEST
 
     _PROMETHEUS_CLIENT_AVAILABLE = True
@@ -16,85 +16,100 @@ except ImportError:  # pragma: no cover - fallback path
     _PROMETHEUS_CLIENT_AVAILABLE = False
     CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
 
+from .api_service_metrics import service_metrics
+
+
+class _RuntimeGaugeSet:
+    def __init__(self) -> None:
+        registry = service_metrics.registry
+        self.active_connections = Gauge(
+            "pg_monitor_runtime_active_connections",
+            "Active PostgreSQL connections from pg_stat_activity.",
+            ["db_identifier"],
+            registry=registry,
+        )
+        self.blocked_sessions = Gauge(
+            "pg_monitor_runtime_blocked_sessions",
+            "Blocked sessions waiting on lock.",
+            ["db_identifier"],
+            registry=registry,
+        )
+        self.longest_tx = Gauge(
+            "pg_monitor_runtime_longest_tx_duration_seconds",
+            "Longest transaction duration in seconds.",
+            ["db_identifier"],
+            registry=registry,
+        )
+        self.waiting_locks = Gauge(
+            "pg_monitor_runtime_waiting_locks",
+            "Waiting locks count from pg_locks.",
+            ["db_identifier"],
+            registry=registry,
+        )
+        self.granted_locks = Gauge(
+            "pg_monitor_runtime_granted_locks",
+            "Granted locks count from pg_locks.",
+            ["db_identifier"],
+            registry=registry,
+        )
+        self.snapshot_age = Gauge(
+            "pg_monitor_runtime_snapshot_age_seconds",
+            "Age of the latest runtime snapshot in seconds.",
+            ["db_identifier"],
+            registry=registry,
+        )
+        self.db_numbackends = Gauge(
+            "pg_monitor_runtime_db_numbackends",
+            "Number of backends from pg_stat_database.",
+            ["db_identifier", "datname"],
+            registry=registry,
+        )
+        self.db_xact_commit = Gauge(
+            "pg_monitor_runtime_db_xact_commit",
+            "Transactions committed from pg_stat_database.",
+            ["db_identifier", "datname"],
+            registry=registry,
+        )
+        self.db_xact_rollback = Gauge(
+            "pg_monitor_runtime_db_xact_rollback",
+            "Transactions rolled back from pg_stat_database.",
+            ["db_identifier", "datname"],
+            registry=registry,
+        )
+        self.db_blks_read = Gauge(
+            "pg_monitor_runtime_db_blks_read",
+            "Blocks read from pg_stat_database.",
+            ["db_identifier", "datname"],
+            registry=registry,
+        )
+        self.db_blks_hit = Gauge(
+            "pg_monitor_runtime_db_blks_hit",
+            "Blocks hit from pg_stat_database.",
+            ["db_identifier", "datname"],
+            registry=registry,
+        )
+        self.db_deadlocks = Gauge(
+            "pg_monitor_runtime_db_deadlocks",
+            "Deadlocks from pg_stat_database.",
+            ["db_identifier", "datname"],
+            registry=registry,
+        )
+
+
+_RUNTIME_GAUGES: _RuntimeGaugeSet | None = None
+
 
 class RuntimeMetricsExporter:
     def __init__(self) -> None:
         if not _PROMETHEUS_CLIENT_AVAILABLE:
             return
 
-        self._registry = CollectorRegistry(auto_describe=True)
-        self._active_connections = Gauge(
-            "pg_monitor_runtime_active_connections",
-            "Active PostgreSQL connections from pg_stat_activity.",
-            ["db_identifier"],
-            registry=self._registry,
-        )
-        self._blocked_sessions = Gauge(
-            "pg_monitor_runtime_blocked_sessions",
-            "Blocked sessions waiting on lock.",
-            ["db_identifier"],
-            registry=self._registry,
-        )
-        self._longest_tx = Gauge(
-            "pg_monitor_runtime_longest_tx_duration_seconds",
-            "Longest transaction duration in seconds.",
-            ["db_identifier"],
-            registry=self._registry,
-        )
-        self._waiting_locks = Gauge(
-            "pg_monitor_runtime_waiting_locks",
-            "Waiting locks count from pg_locks.",
-            ["db_identifier"],
-            registry=self._registry,
-        )
-        self._granted_locks = Gauge(
-            "pg_monitor_runtime_granted_locks",
-            "Granted locks count from pg_locks.",
-            ["db_identifier"],
-            registry=self._registry,
-        )
-        self._snapshot_age = Gauge(
-            "pg_monitor_runtime_snapshot_age_seconds",
-            "Age of the latest runtime snapshot in seconds.",
-            ["db_identifier"],
-            registry=self._registry,
-        )
-        self._db_numbackends = Gauge(
-            "pg_monitor_runtime_db_numbackends",
-            "Number of backends from pg_stat_database.",
-            ["db_identifier", "datname"],
-            registry=self._registry,
-        )
-        self._db_xact_commit = Gauge(
-            "pg_monitor_runtime_db_xact_commit",
-            "Transactions committed from pg_stat_database.",
-            ["db_identifier", "datname"],
-            registry=self._registry,
-        )
-        self._db_xact_rollback = Gauge(
-            "pg_monitor_runtime_db_xact_rollback",
-            "Transactions rolled back from pg_stat_database.",
-            ["db_identifier", "datname"],
-            registry=self._registry,
-        )
-        self._db_blks_read = Gauge(
-            "pg_monitor_runtime_db_blks_read",
-            "Blocks read from pg_stat_database.",
-            ["db_identifier", "datname"],
-            registry=self._registry,
-        )
-        self._db_blks_hit = Gauge(
-            "pg_monitor_runtime_db_blks_hit",
-            "Blocks hit from pg_stat_database.",
-            ["db_identifier", "datname"],
-            registry=self._registry,
-        )
-        self._db_deadlocks = Gauge(
-            "pg_monitor_runtime_db_deadlocks",
-            "Deadlocks from pg_stat_database.",
-            ["db_identifier", "datname"],
-            registry=self._registry,
-        )
+        global _RUNTIME_GAUGES
+        if _RUNTIME_GAUGES is None:
+            _RUNTIME_GAUGES = _RuntimeGaugeSet()
+
+        self._registry = service_metrics.registry
+        self._gauges = _RUNTIME_GAUGES
 
     def render(
         self,
@@ -119,16 +134,22 @@ class RuntimeMetricsExporter:
 
         for state in states:
             labels = {"db_identifier": state.db_identifier}
-            self._active_connections.labels(**labels).set(
+            self._gauges.active_connections.labels(**labels).set(
                 state.active_connections
             )
-            self._blocked_sessions.labels(**labels).set(state.blocked_sessions)
-            self._longest_tx.labels(**labels).set(
+            self._gauges.blocked_sessions.labels(**labels).set(
+                state.blocked_sessions
+            )
+            self._gauges.longest_tx.labels(**labels).set(
                 state.longest_tx_duration_s or 0.0
             )
-            self._waiting_locks.labels(**labels).set(state.waiting_locks)
-            self._granted_locks.labels(**labels).set(state.granted_locks)
-            self._snapshot_age.labels(**labels).set(
+            self._gauges.waiting_locks.labels(**labels).set(
+                state.waiting_locks
+            )
+            self._gauges.granted_locks.labels(**labels).set(
+                state.granted_locks
+            )
+            self._gauges.snapshot_age.labels(**labels).set(
                 max((observed_at - state.captured_at).total_seconds(), 0.0)
             )
 
@@ -137,30 +158,34 @@ class RuntimeMetricsExporter:
                     "db_identifier": state.db_identifier,
                     "datname": db.datname,
                 }
-                self._db_numbackends.labels(**db_labels).set(db.numbackends)
-                self._db_xact_commit.labels(**db_labels).set(db.xact_commit)
-                self._db_xact_rollback.labels(**db_labels).set(
+                self._gauges.db_numbackends.labels(**db_labels).set(
+                    db.numbackends
+                )
+                self._gauges.db_xact_commit.labels(**db_labels).set(
+                    db.xact_commit
+                )
+                self._gauges.db_xact_rollback.labels(**db_labels).set(
                     db.xact_rollback
                 )
-                self._db_blks_read.labels(**db_labels).set(db.blks_read)
-                self._db_blks_hit.labels(**db_labels).set(db.blks_hit)
-                self._db_deadlocks.labels(**db_labels).set(db.deadlocks)
+                self._gauges.db_blks_read.labels(**db_labels).set(db.blks_read)
+                self._gauges.db_blks_hit.labels(**db_labels).set(db.blks_hit)
+                self._gauges.db_deadlocks.labels(**db_labels).set(db.deadlocks)
 
         return generate_latest(self._registry).decode("utf-8")
 
     def _clear_gauges(self) -> None:
-        self._active_connections.clear()
-        self._blocked_sessions.clear()
-        self._longest_tx.clear()
-        self._waiting_locks.clear()
-        self._granted_locks.clear()
-        self._snapshot_age.clear()
-        self._db_numbackends.clear()
-        self._db_xact_commit.clear()
-        self._db_xact_rollback.clear()
-        self._db_blks_read.clear()
-        self._db_blks_hit.clear()
-        self._db_deadlocks.clear()
+        self._gauges.active_connections.clear()
+        self._gauges.blocked_sessions.clear()
+        self._gauges.longest_tx.clear()
+        self._gauges.waiting_locks.clear()
+        self._gauges.granted_locks.clear()
+        self._gauges.snapshot_age.clear()
+        self._gauges.db_numbackends.clear()
+        self._gauges.db_xact_commit.clear()
+        self._gauges.db_xact_rollback.clear()
+        self._gauges.db_blks_read.clear()
+        self._gauges.db_blks_hit.clear()
+        self._gauges.db_deadlocks.clear()
 
 
 def _render_fallback(

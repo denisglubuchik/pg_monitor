@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from pg_monitor.runtime_metrics import (
+from pg_monitor.metrics import (
     RuntimeDatabaseMetrics,
     RuntimeMetricsExporter,
     RuntimeMetricsState,

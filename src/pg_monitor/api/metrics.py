@@ -3,7 +3,7 @@ from __future__ import annotations
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query, Response
 
-from pg_monitor.runtime_metrics import (
+from pg_monitor.metrics import (
     CONTENT_TYPE_LATEST,
     RuntimeMetricsExporter,
     RuntimeMetricsService,

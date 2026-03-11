@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Protocol, Self
 
-from .models import RuntimeDatabaseMetrics, RuntimeMetricsState
+from .runtime_models import RuntimeDatabaseMetrics, RuntimeMetricsState
 
 if TYPE_CHECKING:
     from collections.abc import Callable

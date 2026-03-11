@@ -4,7 +4,7 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Self
 
-from pg_monitor.runtime_metrics import RuntimeMetricsService
+from pg_monitor.metrics import RuntimeMetricsService
 from pg_monitor.storage import RuntimeDatabaseState, RuntimeState
 
 

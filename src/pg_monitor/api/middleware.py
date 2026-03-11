@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from pg_monitor.logging import reset_request_id, set_request_id
+from pg_monitor.metrics import service_metrics
 
 if TYPE_CHECKING:
     from fastapi import FastAPI, Request, Response
@@ -28,7 +29,8 @@ def register_middlewares(app: FastAPI) -> None:
 
         try:
             response = await call_next(request)
-            duration_ms = int((perf_counter() - started_at) * 1000)
+            elapsed = perf_counter() - started_at
+            duration_ms = int(elapsed * 1000)
             _logger.info(
                 "http_request_completed",
                 extra={
@@ -39,10 +41,17 @@ def register_middlewares(app: FastAPI) -> None:
                     "duration_ms": duration_ms,
                 },
             )
+            service_metrics.observe_http_request(
+                method=request.method,
+                path=_resolve_metrics_path(request),
+                status_code=response.status_code,
+                duration_seconds=elapsed,
+            )
             response.headers[REQUEST_ID_HEADER] = request_id
             return response
         except Exception:
-            duration_ms = int((perf_counter() - started_at) * 1000)
+            elapsed = perf_counter() - started_at
+            duration_ms = int(elapsed * 1000)
             _logger.exception(
                 "http_request_failed",
                 extra={
@@ -53,6 +62,21 @@ def register_middlewares(app: FastAPI) -> None:
                     "error_type": "unhandled_exception",
                 },
             )
+            service_metrics.observe_http_request(
+                method=request.method,
+                path=_resolve_metrics_path(request),
+                status_code=500,
+                duration_seconds=elapsed,
+            )
             raise
         finally:
             reset_request_id(token)
+
+
+def _resolve_metrics_path(request: Request) -> str:
+    route = request.scope.get("route")
+    if route is not None:
+        route_path = getattr(route, "path", None)
+        if route_path:
+            return str(route_path)
+    return request.url.path

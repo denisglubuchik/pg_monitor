@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from pg_monitor.runtime_metrics import (
+from pg_monitor.metrics import (
     RuntimeDatabaseMetrics,
     RuntimeMetricsService,
     RuntimeMetricsState,
@@ -92,3 +92,31 @@ def test_metrics_endpoint_passes_db_identifier_filter(
 
     assert response.status_code == 200
     assert calls == ["postgres@127.0.0.1:5432"]
+
+
+def test_metrics_endpoint_includes_service_http_metrics(
+    client,
+    monkeypatch,
+) -> None:
+    async def fake_get_metrics_state(
+        self: RuntimeMetricsService,
+        *,
+        db_identifier: str | None = None,
+    ) -> list[RuntimeMetricsState]:
+        del self, db_identifier
+        return []
+
+    monkeypatch.setattr(
+        RuntimeMetricsService,
+        "get_metrics_state",
+        fake_get_metrics_state,
+    )
+
+    health_response = client.get("/healthz")
+    assert health_response.status_code == 200
+
+    metrics_response = client.get("/metrics")
+
+    assert metrics_response.status_code == 200
+    assert "pg_monitor_http_requests_total" in metrics_response.text
+    assert 'path="/healthz"' in metrics_response.text

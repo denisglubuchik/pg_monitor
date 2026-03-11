@@ -60,7 +60,7 @@
   - API и collector вынесены в отдельные процессы;
   - добавлены split settings (`ApiSettings` / `CollectorSettings`);
   - добавлен startup retry/backoff для collector worker.
-- Итерация 3 в работе:
+- Итерация 3 завершена:
   - реализованы storage (`SQLAlchemy ORM`) + миграции (`Alembic`);
   - реализованы endpoint'ы query analytics:
     - `GET /analytics/queries/weekly-top`;
@@ -69,10 +69,11 @@
   - локальный docker-профиль обновлен:
     - один `PostgreSQL` инстанс с двумя БД;
     - отдельный сервис `migrator` с `alembic upgrade head`.
-- Итерация 4 в работе:
-  - добавляется runtime storage path для `/metrics`;
-  - добавляется endpoint `GET /metrics`;
-  - в docker compose добавлен `prometheus` для scrape API.
+- Итерация 4 завершена:
+  - реализован runtime storage path для `/metrics`;
+  - реализован endpoint `GET /metrics` (runtime + service metrics);
+  - в docker compose добавлен `prometheus` для scrape API;
+  - добавлены preflight checks и job timeouts в collector scheduler.
 
 ## Документация
 
