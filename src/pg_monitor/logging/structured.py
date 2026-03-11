@@ -55,6 +55,7 @@ class JsonFormatter(logging.Formatter):
             "method": getattr(record, "method", None),
             "path": getattr(record, "path", None),
             "status_code": getattr(record, "status_code", None),
+            "rows_written": getattr(record, "rows_written", None),
         }
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)

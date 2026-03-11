@@ -6,11 +6,13 @@ from typing import TYPE_CHECKING
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from pg_monitor.storage import StorageError, StorageUnitOfWorkFactory
+
 from .errors import CollectorError
-from .repository import AsyncpgCollectorRepository, create_pool
 from .service import collect_queries_once, collect_runtime_once
 
 if TYPE_CHECKING:
+    from pg_monitor.collector.repository import AsyncpgCollectorRepository
     from pg_monitor.config import CollectorSettings
 
 logger = logging.getLogger("pg_monitor.collector.scheduler")
@@ -21,15 +23,23 @@ class CollectorScheduler:
         self._settings = settings
         self._scheduler = AsyncIOScheduler(timezone="UTC")
         self._repository: AsyncpgCollectorRepository | None = None
-        self._pool = None
+        self._storage_uow_factory: StorageUnitOfWorkFactory | None = None
         self._started = False
+
+    def bind_dependencies(
+        self,
+        repository: AsyncpgCollectorRepository,
+        storage_uow_factory: StorageUnitOfWorkFactory,
+    ) -> None:
+        self._repository = repository
+        self._storage_uow_factory = storage_uow_factory
 
     async def start(self) -> None:
         if self._started:
             return
-
-        self._pool = await create_pool(str(self._settings.pg_dsn))
-        self._repository = AsyncpgCollectorRepository(self._pool)
+        if self._repository is None or self._storage_uow_factory is None:
+            msg = "collector scheduler dependencies are not initialized"
+            raise RuntimeError(msg)
 
         self._scheduler.add_job(
             self._run_runtime_job,
@@ -71,12 +81,6 @@ class CollectorScheduler:
 
         self._scheduler.shutdown(wait=False)
         self._scheduler.remove_all_jobs()
-
-        if self._pool is not None:
-            await self._pool.close()
-
-        self._pool = None
-        self._repository = None
         self._started = False
 
         logger.info(
@@ -112,14 +116,27 @@ class CollectorScheduler:
         )
 
     async def _run_queries_job(self) -> None:
-        if self._repository is None:
+        if self._repository is None or self._storage_uow_factory is None:
             return
 
         try:
             snapshot = await collect_queries_once(self._repository)
+            async with self._storage_uow_factory() as uow:
+                rows_written = await uow.query_snapshots.write_query_snapshot(
+                    snapshot
+                )
         except CollectorError:
             logger.warning(
                 "collector_queries_job_failed",
+                extra={
+                    "component": "collector",
+                    "collection_profile": "queries",
+                },
+            )
+            return
+        except StorageError:
+            logger.warning(
+                "collector_query_snapshot_write_failed",
                 extra={
                     "component": "collector",
                     "collection_profile": "queries",
@@ -133,5 +150,6 @@ class CollectorScheduler:
                 "component": "collector",
                 "collection_profile": "queries",
                 "db_identifier": snapshot.db_identifier,
+                "rows_written": rows_written,
             },
         )

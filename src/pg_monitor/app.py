@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-import uvicorn
+import logging
+from contextlib import asynccontextmanager
+
+from dishka import make_async_container
+from dishka.integrations.fastapi import FastapiProvider, setup_dishka
 from fastapi import FastAPI
 
 from pg_monitor.api import register_api
@@ -10,6 +14,9 @@ from pg_monitor.config import (
     resolve_settings_paths,
 )
 from pg_monitor.logging import configure_logging
+from pg_monitor.providers import AppProvider
+
+logger = logging.getLogger("pg_monitor.di")
 
 
 def create_app(settings: ApiSettings | None = None) -> FastAPI:
@@ -19,22 +26,30 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         service=app_settings.app_name,
         environment=app_settings.environment,
     )
-    app = FastAPI(title=app_settings.app_name)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        yield
+        dishka_container = getattr(app.state, "dishka_container", None)
+        if dishka_container is not None:
+            await dishka_container.close()
+
+    app = FastAPI(title=app_settings.app_name, lifespan=lifespan)
     app.state.settings = app_settings
-    register_api(app)
-    return app
 
-
-def run() -> None:
-    app_settings = _load_runtime_settings()
-    app = create_app(app_settings)
-    uvicorn.run(
-        app,
-        host=app_settings.host,
-        port=app_settings.port,
-        log_config=None,
+    container = make_async_container(
+        AppProvider(app_settings),
+        FastapiProvider(),
+    )
+    app.state.dishka_container = container
+    setup_dishka(container=container, app=app)
+    logger.info(
+        "dishka_di_enabled",
+        extra={"component": "api"},
     )
 
+    register_api(app)
+    return app
 
 def _load_runtime_settings() -> ApiSettings:
     env_path = resolve_settings_paths()

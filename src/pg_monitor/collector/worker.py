@@ -4,6 +4,9 @@ import asyncio
 import logging
 import signal
 from contextlib import suppress
+from typing import TYPE_CHECKING
+
+from dishka import make_async_container
 
 from pg_monitor.config import (
     CollectorSettings,
@@ -11,11 +14,17 @@ from pg_monitor.config import (
     resolve_settings_paths,
 )
 from pg_monitor.logging import configure_logging
+from pg_monitor.providers.collector import CollectorProvider
+from pg_monitor.storage import StorageUnitOfWorkFactory
 
 from .errors import CollectorConnectionError
+from .repository import AsyncpgCollectorRepository
 from .scheduler import CollectorScheduler
 
 logger = logging.getLogger("pg_monitor.collector.worker")
+
+if TYPE_CHECKING:
+    from dishka.async_container import AsyncContainer
 
 
 def run() -> None:
@@ -47,20 +56,35 @@ async def run_worker(
     if stop_event is None:
         _register_signal_handlers(local_stop_event)
 
-    scheduler = CollectorScheduler(worker_settings)
-    await _start_scheduler_with_retry(scheduler, worker_settings)
-
-    logger.info(
-        "collector_worker_started",
-        extra={
-            "component": "collector",
-        },
-    )
-
+    container: AsyncContainer | None = None
+    scheduler: CollectorScheduler | None = None
     try:
+        scheduler = CollectorScheduler(worker_settings)
+        if hasattr(scheduler, "bind_dependencies"):
+            container = make_async_container(CollectorProvider(worker_settings))
+            repository = await container.get(AsyncpgCollectorRepository)
+            storage_uow_factory = await container.get(
+                StorageUnitOfWorkFactory
+            )
+            scheduler.bind_dependencies(
+                repository=repository,
+                storage_uow_factory=storage_uow_factory,
+            )
+        await _start_scheduler_with_retry(scheduler, worker_settings)
+
+        logger.info(
+            "collector_worker_started",
+            extra={
+                "component": "collector",
+            },
+        )
+
         await local_stop_event.wait()
     finally:
-        await scheduler.shutdown()
+        if scheduler is not None:
+            await scheduler.shutdown()
+        if container is not None:
+            await _close_container(container)
         logger.info(
             "collector_worker_stopped",
             extra={
@@ -116,3 +140,7 @@ async def _start_scheduler_with_retry(
             )
             await asyncio.sleep(delay)
             delay = min(delay * 2, max_delay)
+
+
+async def _close_container(container: AsyncContainer) -> None:
+    await container.close()

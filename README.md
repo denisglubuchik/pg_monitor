@@ -53,14 +53,23 @@
 
 ## Статус
 
-Сейчас инициализирован проект (`uv init`) и подготовлена документация.
-Реализация кода идёт итерациями, test-first и по согласованному плану.
+Текущий статус (2026-03-10):
+- Итерация 1 завершена.
+- Итерация 2 завершена:
+  - реализован collector (`pg_stat_*`);
+  - API и collector вынесены в отдельные процессы;
+  - добавлены split settings (`ApiSettings` / `CollectorSettings`);
+  - добавлен startup retry/backoff для collector worker.
+- Следующий этап: Итерация 3 (snapshot storage + delta analytics).
 
 ## Документация
 
 - Полная спецификация MVP: `docs/mvp-spec.md`
 - Архитектурное предложение: `docs/architecture.md`
 - Пошаговый roadmap MVP: `docs/roadmap.md`
+- Детальный план итерации 3: `docs/iteration-3-plan.md`
+- Архитектура итерации 3: `docs/iteration-3-architecture.md`
+- Архитектура итерации 4: `docs/iteration-4-architecture.md`
 - Корреляция логов: `docs/logging-correlation.md`
 - Правила совместной работы: `docs/working-agreement.md`
 
@@ -69,9 +78,17 @@
 ```bash
 uv sync
 export PG_MONITOR_PG_DSN='postgresql://user:password@localhost:5432/postgres'
-uv run python main.py
-# отдельный процесс collector scheduler:
-uv run python main_collector.py
+# API процесс:
+uv run uvicorn pg_monitor.app:create_app --factory --host 0.0.0.0 --port 8000 --log-config none
+# Collector worker процесс:
+uv run pg-monitor-collector
+```
+
+Локальный docker-профиль итерации 3:
+
+```bash
+cd docker/compose
+docker compose up --build
 ```
 
 ## Конфиг (.env + env)
@@ -84,6 +101,14 @@ uv run python main_collector.py
 
 Обязательный параметр:
 - `PG_MONITOR_PG_DSN` (в `.env` или OS env)
+- `PG_MONITOR_STORAGE_DSN` (в `.env` или OS env)
+
+Ключевые параметры collector:
+- `PG_MONITOR_RUNTIME_POLL_INTERVAL_SECONDS`
+- `PG_MONITOR_QUERY_POLL_INTERVAL_SECONDS`
+- `PG_MONITOR_COLLECTOR_STARTUP_RETRY_ATTEMPTS`
+- `PG_MONITOR_COLLECTOR_STARTUP_RETRY_BASE_DELAY_SECONDS`
+- `PG_MONITOR_COLLECTOR_STARTUP_RETRY_MAX_DELAY_SECONDS`
 
 ## Ключевой механизм “за неделю”
 

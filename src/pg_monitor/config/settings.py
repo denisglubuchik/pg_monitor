@@ -14,6 +14,9 @@ from pydantic_settings import (
 
 DOTENV_FILE_ENV = "PG_MONITOR_ENV_FILE"
 DEFAULT_DOTENV_FILE = ".env"
+DEFAULT_STORAGE_DSN = (
+    "postgresql://postgres:postgres@localhost:5432/pg_monitor_storage"
+)
 
 ALLOWED_LOG_LEVELS = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}
 
@@ -63,6 +66,7 @@ class _BaseMonitorSettings(BaseSettings):
 class ApiSettings(_BaseMonitorSettings):
     host: str = "0.0.0.0"
     port: int = 8000
+    storage_dsn: PostgresDsn = DEFAULT_STORAGE_DSN
 
 
 class CollectorSettings(_BaseMonitorSettings):
@@ -73,6 +77,7 @@ class CollectorSettings(_BaseMonitorSettings):
     collector_startup_retry_base_delay_seconds: float = 1.0
     collector_startup_retry_max_delay_seconds: float = 10.0
     pg_dsn: PostgresDsn
+    storage_dsn: PostgresDsn = DEFAULT_STORAGE_DSN
 
     @field_validator(
         "runtime_poll_interval_seconds",
