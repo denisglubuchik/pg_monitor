@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi.testclient import TestClient
+import httpx
 
 from pg_monitor.app import create_app
 from pg_monitor.collector import CollectorConnectionError
@@ -10,15 +10,27 @@ from pg_monitor.collector.worker import run_worker
 from pg_monitor.config import ApiSettings, CollectorSettings
 
 
-def test_app_has_no_embedded_collector_scheduler() -> None:
-    app = create_app(
-        ApiSettings()
-    )
+def _get(app, path: str) -> httpx.Response:
+    async def _request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            return await client.get(path)
 
-    with TestClient(app) as client:
-        response = client.get("/healthz")
+    return asyncio.run(_request())
+
+
+def test_app_has_no_embedded_collector_scheduler() -> None:
+    app = create_app(ApiSettings())
+
+    try:
+        response = _get(app, "/healthz")
         assert response.status_code == 200
-        assert not hasattr(client.app.state, "collector_scheduler")
+        assert not hasattr(app.state, "collector_scheduler")
+    finally:
+        asyncio.run(app.state.dishka_container.close())
 
 
 def test_worker_starts_and_stops_scheduler(monkeypatch) -> None:

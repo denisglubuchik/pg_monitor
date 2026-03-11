@@ -20,6 +20,8 @@ def test_api_settings_priority_defaults_dotenv_env(tmp_path) -> None:
             "PG_MONITOR_HOST=127.0.0.1\n"
             "PG_MONITOR_PORT=9200\n"
             "PG_MONITOR_LOG_LEVEL=warning\n"
+            "PG_MONITOR_STORAGE_DSN="
+            "postgresql://dotenv_user:dotenv_password@localhost:5432/storage_dotenv\n"
         ),
         encoding="utf-8",
     )
@@ -30,6 +32,7 @@ def test_api_settings_priority_defaults_dotenv_env(tmp_path) -> None:
             "PG_MONITOR_APP_NAME": "from-env-app",
             "PG_MONITOR_PORT": "9300",
             "PG_MONITOR_LOG_LEVEL": "ERROR",
+            "PG_MONITOR_STORAGE_DSN": "postgresql://env_user:env_password@localhost:5432/storage_env",
         },
     )
 
@@ -39,6 +42,7 @@ def test_api_settings_priority_defaults_dotenv_env(tmp_path) -> None:
     assert settings.host == "127.0.0.1"
     assert settings.port == 9300
     assert settings.log_level == "ERROR"
+    assert "storage_env" in str(settings.storage_dsn)
 
 
 def test_collector_settings_priority_defaults_dotenv_env(tmp_path) -> None:
@@ -54,6 +58,8 @@ def test_collector_settings_priority_defaults_dotenv_env(tmp_path) -> None:
             "PG_MONITOR_COLLECTOR_STARTUP_RETRY_MAX_DELAY_SECONDS=20\n"
             "PG_MONITOR_PG_DSN="
             "postgresql://dotenv_user:dotenv_password@localhost:5432/dotenv_db\n"
+            "PG_MONITOR_STORAGE_DSN="
+            "postgresql://dotenv_user:dotenv_password@localhost:5432/storage_dotenv\n"
         ),
         encoding="utf-8",
     )
@@ -64,6 +70,7 @@ def test_collector_settings_priority_defaults_dotenv_env(tmp_path) -> None:
             "PG_MONITOR_COLLECTOR_SCHEDULER_ENABLED": "true",
             "PG_MONITOR_RUNTIME_POLL_INTERVAL_SECONDS": "60",
             "PG_MONITOR_PG_DSN": "postgresql://env_user:env_password@localhost:5432/env_db",
+            "PG_MONITOR_STORAGE_DSN": "postgresql://env_user:env_password@localhost:5432/storage_env",
         },
     )
 
@@ -76,6 +83,7 @@ def test_collector_settings_priority_defaults_dotenv_env(tmp_path) -> None:
     assert settings.collector_startup_retry_base_delay_seconds == 2
     assert settings.collector_startup_retry_max_delay_seconds == 20
     assert "env_db" in str(settings.pg_dsn)
+    assert "storage_env" in str(settings.storage_dsn)
 
 
 def test_collector_settings_require_pg_dsn(monkeypatch, tmp_path) -> None:

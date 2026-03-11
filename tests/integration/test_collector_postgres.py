@@ -10,7 +10,7 @@ pytestmark = pytest.mark.integration
 
 @pytest.mark.skipif(
     shutil.which("docker") is None,
-    reason="docker is not available",
+    reason="docker binary is not available",
 )
 def test_collectors_with_postgres_container() -> None:
     pytest.importorskip("asyncpg")
