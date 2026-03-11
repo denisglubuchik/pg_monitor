@@ -11,6 +11,10 @@ from sqlalchemy.ext.asyncio import (  # noqa: TC002
 
 from pg_monitor.config import ApiSettings  # noqa: TC001
 from pg_monitor.query_analytics import QueryAnalyticsService
+from pg_monitor.runtime_metrics import (
+    RuntimeMetricsExporter,
+    RuntimeMetricsService,
+)
 from pg_monitor.storage import (
     StorageUnitOfWorkFactory,
     create_storage_engine,
@@ -56,3 +60,14 @@ class AppProvider(Provider):
         uow_factory: StorageUnitOfWorkFactory,
     ) -> QueryAnalyticsService:
         return QueryAnalyticsService(uow_factory)
+
+    @provide(scope=Scope.APP)
+    def provide_runtime_metrics_service(
+        self,
+        uow_factory: StorageUnitOfWorkFactory,
+    ) -> RuntimeMetricsService:
+        return RuntimeMetricsService(uow_factory)
+
+    @provide(scope=Scope.APP)
+    def provide_runtime_metrics_exporter(self) -> RuntimeMetricsExporter:
+        return RuntimeMetricsExporter()

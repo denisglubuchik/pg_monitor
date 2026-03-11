@@ -129,3 +129,21 @@ def test_collector_settings_reject_non_positive_retry_attempts(
         ConfigurationError, match="collector_startup_retry_attempts"
     ):
         load_collector_settings(env_path=env_file, environ={})
+
+
+def test_collector_settings_reject_non_positive_job_timeout(
+    tmp_path,
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        (
+            "PG_MONITOR_PG_DSN=postgresql://dotenv_user:dotenv_password@localhost:5432/dotenv_db\n"
+            "PG_MONITOR_RUNTIME_JOB_TIMEOUT_SECONDS=0\n"
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ConfigurationError, match="runtime_job_timeout_seconds"
+    ):
+        load_collector_settings(env_path=env_file, environ={})

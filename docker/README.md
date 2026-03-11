@@ -16,6 +16,8 @@ docker/
   postgres/
     init/
       01-create-databases.sh
+  prometheus/
+    prometheus.yml
 ```
 
 Назначение:
@@ -34,4 +36,5 @@ docker compose up --build
 - `postgres` (один PostgreSQL-инстанс с двумя БД: `monitored_db`, `pg_monitor_storage`);
 - `migrator` (применяет `alembic upgrade head`);
 - `api` (FastAPI);
-- `collector` (worker со scheduler).
+- `collector` (worker со scheduler);
+- `prometheus` (scrape `api:8000/metrics`, UI на `http://localhost:9090`).

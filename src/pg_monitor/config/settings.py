@@ -76,6 +76,8 @@ class CollectorSettings(_BaseMonitorSettings):
     collector_startup_retry_attempts: int = 5
     collector_startup_retry_base_delay_seconds: float = 1.0
     collector_startup_retry_max_delay_seconds: float = 10.0
+    runtime_job_timeout_seconds: float = 30.0
+    query_job_timeout_seconds: float = 60.0
     pg_dsn: PostgresDsn
     storage_dsn: PostgresDsn = DEFAULT_STORAGE_DSN
 
@@ -106,6 +108,14 @@ class CollectorSettings(_BaseMonitorSettings):
     def validate_retry_delay(cls, value: float) -> float:
         if value <= 0:
             msg = "collector startup retry delay must be greater than 0"
+            raise ValueError(msg)
+        return value
+
+    @field_validator("runtime_job_timeout_seconds", "query_job_timeout_seconds")
+    @classmethod
+    def validate_job_timeout(cls, value: float) -> float:
+        if value <= 0:
+            msg = "collector job timeout must be greater than 0"
             raise ValueError(msg)
         return value
 

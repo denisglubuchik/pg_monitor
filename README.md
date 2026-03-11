@@ -53,14 +53,26 @@
 
 ## Статус
 
-Текущий статус (2026-03-10):
+Текущий статус (2026-03-11):
 - Итерация 1 завершена.
 - Итерация 2 завершена:
   - реализован collector (`pg_stat_*`);
   - API и collector вынесены в отдельные процессы;
   - добавлены split settings (`ApiSettings` / `CollectorSettings`);
   - добавлен startup retry/backoff для collector worker.
-- Следующий этап: Итерация 3 (snapshot storage + delta analytics).
+- Итерация 3 в работе:
+  - реализованы storage (`SQLAlchemy ORM`) + миграции (`Alembic`);
+  - реализованы endpoint'ы query analytics:
+    - `GET /analytics/queries/weekly-top`;
+    - `GET /analytics/queries/week-over-week`;
+  - collector сохраняет query snapshots в storage DB;
+  - локальный docker-профиль обновлен:
+    - один `PostgreSQL` инстанс с двумя БД;
+    - отдельный сервис `migrator` с `alembic upgrade head`.
+- Итерация 4 в работе:
+  - добавляется runtime storage path для `/metrics`;
+  - добавляется endpoint `GET /metrics`;
+  - в docker compose добавлен `prometheus` для scrape API.
 
 ## Документация
 
@@ -69,6 +81,7 @@
 - Пошаговый roadmap MVP: `docs/roadmap.md`
 - Детальный план итерации 3: `docs/iteration-3-plan.md`
 - Архитектура итерации 3: `docs/iteration-3-architecture.md`
+- Детальный план итерации 4: `docs/iteration-4-plan.md`
 - Архитектура итерации 4: `docs/iteration-4-architecture.md`
 - Корреляция логов: `docs/logging-correlation.md`
 - Правила совместной работы: `docs/working-agreement.md`
@@ -84,11 +97,29 @@ uv run uvicorn pg_monitor.app:create_app --factory --host 0.0.0.0 --port 8000 --
 uv run pg-monitor-collector
 ```
 
-Локальный docker-профиль итерации 3:
+Локальный docker-профиль (итерации 3-4):
 
 ```bash
 cd docker/compose
 docker compose up --build
+```
+
+После запуска:
+- API: `http://localhost:8000`
+- Prometheus: `http://localhost:9090` (`Status -> Targets` для проверки scrape)
+
+## Тесты
+
+Быстрый запуск (без интеграционных тестов):
+
+```bash
+pytest -q
+```
+
+Интеграционные тесты запускаются только явно:
+
+```bash
+pytest -q --run-integration
 ```
 
 ## Конфиг (.env + env)

@@ -50,3 +50,27 @@ class QuerySnapshotRow:
 class QuerySnapshotPoint:
     captured_at: datetime
     rows: list[QuerySnapshotRow]
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeDatabaseState:
+    datid: int
+    datname: str
+    numbackends: int
+    xact_commit: int
+    xact_rollback: int
+    blks_read: int
+    blks_hit: int
+    deadlocks: int
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeState:
+    captured_at: datetime
+    db_identifier: str
+    active_connections: int
+    blocked_sessions: int
+    longest_tx_duration_s: float | None
+    waiting_locks: int
+    granted_locks: int
+    database: list[RuntimeDatabaseState]

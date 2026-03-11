@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -8,7 +9,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from pg_monitor.storage import StorageError, StorageUnitOfWorkFactory
 
-from .errors import CollectorError
+from .errors import CollectorConnectionError, CollectorError
 from .service import collect_queries_once, collect_runtime_once
 
 if TYPE_CHECKING:
@@ -40,6 +41,8 @@ class CollectorScheduler:
         if self._repository is None or self._storage_uow_factory is None:
             msg = "collector scheduler dependencies are not initialized"
             raise RuntimeError(msg)
+
+        await self._preflight_dependencies()
 
         self._scheduler.add_job(
             self._run_runtime_job,
@@ -91,17 +94,43 @@ class CollectorScheduler:
         )
 
     async def _run_runtime_job(self) -> None:
-        if self._repository is None:
+        if self._repository is None or self._storage_uow_factory is None:
             return
 
         try:
-            snapshot = await collect_runtime_once(self._repository)
+            snapshot = await asyncio.wait_for(
+                collect_runtime_once(self._repository),
+                timeout=self._settings.runtime_job_timeout_seconds,
+            )
+            async with self._storage_uow_factory() as uow:
+                rows_written = (
+                    await uow.runtime_snapshots.write_runtime_snapshot(snapshot)
+                )
         except CollectorError:
             logger.warning(
                 "collector_runtime_job_failed",
                 extra={
                     "component": "collector",
                     "collection_profile": "runtime",
+                },
+            )
+            return
+        except StorageError:
+            logger.warning(
+                "collector_runtime_snapshot_write_failed",
+                extra={
+                    "component": "collector",
+                    "collection_profile": "runtime",
+                },
+            )
+            return
+        except TimeoutError:
+            logger.warning(
+                "collector_runtime_job_timeout",
+                extra={
+                    "component": "collector",
+                    "collection_profile": "runtime",
+                    "timeout_s": self._settings.runtime_job_timeout_seconds,
                 },
             )
             return
@@ -112,6 +141,7 @@ class CollectorScheduler:
                 "component": "collector",
                 "collection_profile": "runtime",
                 "db_identifier": snapshot.db_identifier,
+                "rows_written": rows_written,
             },
         )
 
@@ -120,7 +150,10 @@ class CollectorScheduler:
             return
 
         try:
-            snapshot = await collect_queries_once(self._repository)
+            snapshot = await asyncio.wait_for(
+                collect_queries_once(self._repository),
+                timeout=self._settings.query_job_timeout_seconds,
+            )
             async with self._storage_uow_factory() as uow:
                 rows_written = await uow.query_snapshots.write_query_snapshot(
                     snapshot
@@ -143,6 +176,16 @@ class CollectorScheduler:
                 },
             )
             return
+        except TimeoutError:
+            logger.warning(
+                "collector_queries_job_timeout",
+                extra={
+                    "component": "collector",
+                    "collection_profile": "queries",
+                    "timeout_s": self._settings.query_job_timeout_seconds,
+                },
+            )
+            return
 
         logger.info(
             "collector_queries_job_completed",
@@ -153,3 +196,20 @@ class CollectorScheduler:
                 "rows_written": rows_written,
             },
         )
+
+    async def _preflight_dependencies(self) -> None:
+        if self._repository is None or self._storage_uow_factory is None:
+            return
+
+        try:
+            await self._repository.fetch_db_identifier()
+        except CollectorError:
+            raise
+
+        try:
+            async with self._storage_uow_factory() as uow:
+                await uow.runtime_snapshots.list_runtime_current()
+        except StorageError as exc:
+            raise CollectorConnectionError(
+                f"collector storage preflight failed: {exc}"
+            ) from exc

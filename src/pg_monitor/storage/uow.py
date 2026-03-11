@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
 
-from .repositories import QuerySnapshotRepository
+from .repositories import QuerySnapshotRepository, RuntimeSnapshotRepository
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -35,6 +35,13 @@ class StorageUnitOfWork:
             msg = "unit of work is not entered"
             raise RuntimeError(msg)
         return QuerySnapshotRepository(self._session)
+
+    @property
+    def runtime_snapshots(self) -> RuntimeSnapshotRepository:
+        if self._session is None:
+            msg = "unit of work is not entered"
+            raise RuntimeError(msg)
+        return RuntimeSnapshotRepository(self._session)
 
     async def __aenter__(self) -> Self:
         self._session = self._session_factory()
