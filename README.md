@@ -53,7 +53,7 @@
 
 ## Статус
 
-Текущий статус (2026-03-11):
+Текущий статус (2026-03-17):
 - Итерация 1 завершена.
 - Итерация 2 завершена:
   - реализован collector (`pg_stat_*`);
@@ -74,6 +74,48 @@
   - реализован endpoint `GET /metrics` (runtime + service metrics);
   - в docker compose добавлен `prometheus` для scrape API;
   - добавлены preflight checks и job timeouts в collector scheduler.
+- Итерация 5 завершена:
+  - добавлены инфраструктурные конфиги для `Alertmanager` и `Grafana`;
+  - добавлены Prometheus alert rules (`docker/prometheus/alerts.yml`);
+  - добавлен provisioning dashboards/datasources для Grafana;
+  - добавлены и стабилизированы dashboards:
+    - `Overview v2` (runtime + lock + TPS/cache/rollback signals, переменные `db_identifier`/`datname`);
+    - `Query Analytics` (SQL-based top queries + window coverage из storage DB);
+  - endpoint'ы query analytics расширены параметрами окна:
+    - `window_start_at`;
+    - `window_end_at`;
+  - Telegram routing переведен на env-only конфигурацию:
+    - секреты не хранятся в `docker/alertmanager/alertmanager.yml`;
+    - значения `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` подставляются в runtime при старте `alertmanager`;
+  - локальный compose smoke-check пройден (`make up`, `make ps`, readiness Alertmanager, проверка `Prometheus -> Alertmanager`);
+  - детальный план: `docs/iteration-5-plan.md`.
+
+## Query Analytics API
+
+`GET /analytics/queries/weekly-top`
+- обязательные параметры:
+  - `db_identifier`
+- опциональные параметры:
+  - `limit` (default `20`)
+  - `sort_by` (`total_exec_time_ms_delta` или `calls_delta`)
+  - `window_start_at` (ISO datetime)
+  - `window_end_at` (ISO datetime)
+- поведение:
+  - если `window_start_at/window_end_at` не переданы, используется дефолтное окно последних 7 дней;
+  - если передан только один параметр окна, возвращается `422`.
+
+`GET /analytics/queries/week-over-week`
+- обязательные параметры:
+  - `db_identifier`
+- опциональные параметры:
+  - `limit` (default `20`)
+  - `sort_by` (`total_exec_time_ms_delta` или `calls_delta`)
+  - `window_start_at` (ISO datetime)
+  - `window_end_at` (ISO datetime)
+- поведение:
+  - если `window_start_at/window_end_at` не переданы, сравниваются 2 соседних окна по 7 дней;
+  - если окно передано, `current_week` берется из переданного диапазона, `previous_week` строится как предыдущий диапазон той же длины;
+  - если передан только один параметр окна, возвращается `422`.
 
 ## Документация
 
@@ -84,6 +126,8 @@
 - Архитектура итерации 3: `docs/iteration-3-architecture.md`
 - Детальный план итерации 4: `docs/iteration-4-plan.md`
 - Архитектура итерации 4: `docs/iteration-4-architecture.md`
+- Детальный план итерации 5: `docs/iteration-5-plan.md`
+- Архитектура итерации 5: `docs/iteration-5-architecture.md`
 - Корреляция логов: `docs/logging-correlation.md`
 - Правила совместной работы: `docs/working-agreement.md`
 
@@ -93,21 +137,39 @@
 uv sync
 export PG_MONITOR_PG_DSN='postgresql://user:password@localhost:5432/postgres'
 # API процесс:
-uv run uvicorn pg_monitor.app:create_app --factory --host 0.0.0.0 --port 8000 --log-config none
+uv run uvicorn pg_monitor.app:create_app --factory --host 0.0.0.0 --port 8000
 # Collector worker процесс:
 uv run pg-monitor-collector
 ```
 
-Локальный docker-профиль (итерации 3-4):
+Локальный docker-профиль (итерации 3-5):
 
 ```bash
-cd docker/compose
-docker compose up --build
+make up
 ```
 
 После запуска:
 - API: `http://localhost:8000`
 - Prometheus: `http://localhost:9090` (`Status -> Targets` для проверки scrape)
+- Alertmanager: `http://localhost:9093`
+- Grafana: `http://localhost:3000` (`admin/admin`)
+
+Быстрые проверки локального стека:
+
+```bash
+make ps
+curl -fsS http://localhost:9093/-/ready
+curl -fsS http://localhost:9090/api/v1/alertmanagers
+```
+
+Текущий источник данных для панелей:
+- `Overview` читает Prometheus runtime/service метрики.
+- `Query Analytics` таблицы читают storage PostgreSQL datasource (`pg_monitor_storage`).
+- ссылки `Weekly Top API (fixed 7d)` и `Week over Week API (fixed 7d)` на dashboard используются как API quick links.
+
+Набор скриптов для ручной генерации нагрузки:
+- `tools/load-sim/README.md`
+- быстрый старт: `./tools/load-sim/setup.sh && ./tools/load-sim/query-burst.sh 1000`
 
 ## Тесты
 
@@ -142,10 +204,18 @@ pytest -q --run-integration
 - `PG_MONITOR_COLLECTOR_STARTUP_RETRY_BASE_DELAY_SECONDS`
 - `PG_MONITOR_COLLECTOR_STARTUP_RETRY_MAX_DELAY_SECONDS`
 
-## Ключевой механизм “за неделю”
+Параметры alerting:
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+
+Важно по безопасности:
+- не храните Telegram token/chat_id в `docker/alertmanager/alertmanager.yml` и в git;
+- `docker/alertmanager/alertmanager.yml` используется как шаблон, значения подставляются в runtime из env при старте `alertmanager`.
+
+## Ключевой механизм “за период”
 
 `pg_stat_statements` хранит накопленные счетчики.
-Чтобы получить честные метрики за период, используем:
+Чтобы получить честные метрики за произвольный период, используем:
 
 1. регулярные снапшоты,
 2. выбор `t_start` и `t_end`,

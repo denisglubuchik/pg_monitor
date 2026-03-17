@@ -53,11 +53,28 @@ docker compose up --build
 - `alertmanager` (routing алертов, UI на `http://localhost:9093`);
 - `grafana` (dashboards, UI на `http://localhost:3000`, `admin/admin`).
 
+Про dashboards:
+- `Overview`:
+  - runtime/lock сигналы + дополнительные operational панели (`TPS`, `rollback ratio`, `cache hit ratio`, `waiting/granted locks`);
+  - переменные `db_identifier` и `datname` для фильтрации.
+- `Query Analytics`:
+  - top queries и coverage строятся SQL-запросами к storage DB (`pg_monitor_storage`);
+  - API-ссылки `weekly-top` / `week-over-week` оставлены как quick links;
+  - API поддерживает гибкие окна через `window_start_at` и `window_end_at`.
+
 Telegram routing:
 - заполните `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID` в `docker/env/.env.docker.example` или в отдельном env-файле;
-- Alertmanager читает переменные окружения и отправляет firing/resolved алерты через Bot API.
+- `docker/alertmanager/alertmanager.yml` хранится в репозитории как шаблон без секретов;
+- при старте контейнера `alertmanager` значения `TELEGRAM_*` подставляются в runtime-конфиг;
+- Alertmanager отправляет firing/resolved алерты через Bot API.
 
 Ручная генерация нагрузки для проверки дашбордов/алертов:
 - `./tools/load-sim/setup.sh`
 - `./tools/load-sim/query-burst.sh 1000`
 - `./tools/load-sim/lock-holder.sh 300` + `./tools/load-sim/lock-waiter.sh`
+
+Проверка, что в Grafana все подхватилось:
+1. `Connections -> Data sources`:
+- `Prometheus` (`uid=prometheus`);
+- `Storage PostgreSQL` (`uid=storage_pg`).
+2. В dashboard `pg-monitor / Overview` должны быть переменные `db_identifier` и `datname`.

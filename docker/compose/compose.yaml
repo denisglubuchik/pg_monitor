@@ -77,9 +77,18 @@ services:
 
   alertmanager:
     image: prom/alertmanager:v0.28.1
+    env_file:
+      - ../env/.env.docker
+    entrypoint:
+      - "/bin/sh"
+      - "-ec"
     command:
-      - "--config.file=/etc/alertmanager/alertmanager.yml"
-      - "--storage.path=/alertmanager"
+      - |
+        sed \
+          -e "s|__TELEGRAM_BOT_TOKEN__|$${TELEGRAM_BOT_TOKEN:-disabled}|g" \
+          -e "s|__TELEGRAM_CHAT_ID__|$${TELEGRAM_CHAT_ID:-0}|g" \
+          /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml
+        exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
     volumes:
       - ../alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     ports:
