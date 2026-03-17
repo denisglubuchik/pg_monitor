@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator  # noqa: TC003
+from urllib.parse import urlparse
 
 from asyncpg import Pool  # noqa: TC002
 from dishka import Provider, Scope, provide
@@ -60,8 +61,12 @@ class CollectorProvider(Provider):
     def provide_collector_repository(
         self,
         pool: Pool,
+        settings: CollectorSettings,
     ) -> AsyncpgCollectorRepository:
-        return AsyncpgCollectorRepository(pool)
+        return AsyncpgCollectorRepository(
+            pool,
+            db_identifier=_build_db_identifier(str(settings.pg_dsn)),
+        )
 
     @provide(scope=Scope.APP)
     def provide_storage_uow_factory(
@@ -69,3 +74,11 @@ class CollectorProvider(Provider):
         session_factory: async_sessionmaker[AsyncSession],
     ) -> StorageUnitOfWorkFactory:
         return StorageUnitOfWorkFactory(session_factory)
+
+
+def _build_db_identifier(dsn: str) -> str:
+    parsed = urlparse(dsn)
+    db_name = parsed.path.lstrip("/") or "unknown"
+    host = parsed.hostname or "unknown"
+    port = parsed.port or 5432
+    return f"{db_name}@{host}:{port}"

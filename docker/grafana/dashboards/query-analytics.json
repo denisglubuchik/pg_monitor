@@ -1,0 +1,482 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": true,
+      "title": "Weekly Top API (fixed 7d)",
+      "type": "link",
+      "url": "http://localhost:8000/analytics/queries/weekly-top?db_identifier=${db_identifier}&limit=${limit}"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": true,
+      "title": "Week over Week API (fixed 7d)",
+      "type": "link",
+      "url": "http://localhost:8000/analytics/queries/week-over-week?db_identifier=${db_identifier}&limit=${limit}"
+    }
+  ],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.3
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(pg_monitor_http_request_duration_seconds_bucket{path=~\"/analytics/queries/.*\"}[5m])))",
+          "legendFormat": "analytics p95",
+          "refId": "A"
+        }
+      ],
+      "title": "Analytics Endpoint Latency p95",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.05
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(pg_monitor_http_requests_total{path=~\"/analytics/queries/.*\"}[5m]))",
+          "legendFormat": "analytics rps",
+          "refId": "A"
+        }
+      ],
+      "title": "Analytics Endpoint Throughput",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(pg_monitor_http_requests_total{path=~\"/analytics/queries/.*\",status_code=~\"5..\"}[5m])) / clamp_min(sum(rate(pg_monitor_http_requests_total{path=~\"/analytics/queries/.*\"}[5m])), 1)",
+          "legendFormat": "analytics error ratio",
+          "refId": "A"
+        }
+      ],
+      "title": "Analytics Endpoint Error Ratio",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "storage_pg"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "id": 4,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "total_exec_time_ms_delta"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "storage_pg"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH filtered AS (\n  SELECT *\n  FROM query_metric_snapshots\n  WHERE db_identifier = '${db_identifier}'\n    AND captured_at BETWEEN to_timestamp($__from / 1000.0) AND to_timestamp($__to / 1000.0)\n), start_snap AS (\n  SELECT *\n  FROM (\n    SELECT f.*, row_number() OVER (PARTITION BY queryid, dbid, userid ORDER BY captured_at ASC) AS rn\n    FROM filtered AS f\n  ) AS t\n  WHERE rn = 1\n), end_snap AS (\n  SELECT *\n  FROM (\n    SELECT f.*, row_number() OVER (PARTITION BY queryid, dbid, userid ORDER BY captured_at DESC) AS rn\n    FROM filtered AS f\n  ) AS t\n  WHERE rn = 1\n), deltas AS (\n  SELECT\n    e.queryid,\n    e.dbid,\n    e.userid,\n    left(e.query, 240) AS query,\n    GREATEST(e.calls - COALESCE(s.calls, e.calls), 0) AS calls_delta,\n    GREATEST(e.total_exec_time_ms - COALESCE(s.total_exec_time_ms, e.total_exec_time_ms), 0) AS total_exec_time_ms_delta,\n    CASE\n      WHEN GREATEST(e.calls - COALESCE(s.calls, e.calls), 0) = 0 THEN NULL\n      ELSE GREATEST(e.total_exec_time_ms - COALESCE(s.total_exec_time_ms, e.total_exec_time_ms), 0)\n        / NULLIF(GREATEST(e.calls - COALESCE(s.calls, e.calls), 0), 0)\n    END AS mean_exec_time_ms_delta\n  FROM end_snap AS e\n  LEFT JOIN start_snap AS s USING (queryid, dbid, userid)\n), cleaned AS (\n  SELECT *\n  FROM deltas\n  WHERE (total_exec_time_ms_delta > 0 OR calls_delta > 0)\n    AND query IS NOT NULL\n    AND query !~* '^(BEGIN|COMMIT|ROLLBACK|SET\\s|SHOW\\s|UNLISTEN|CLOSE\\s|SELECT\\s+pg_)'\n    AND query NOT ILIKE '%query_metric_snapshots%'\n    AND query NOT ILIKE '%runtime_%'\n), ranked AS (\n  SELECT\n    *,\n    (100.0 * total_exec_time_ms_delta / NULLIF(sum(total_exec_time_ms_delta) OVER (), 0)) AS share_pct\n  FROM cleaned\n)\nSELECT\n  queryid,\n  dbid,\n  userid,\n  query,\n  calls_delta,\n  round(total_exec_time_ms_delta::numeric, 2) AS total_exec_time_ms_delta,\n  round(COALESCE(mean_exec_time_ms_delta, 0)::numeric, 2) AS mean_exec_time_ms_delta,\n  round(COALESCE(share_pct, 0)::numeric, 2) AS share_pct\nFROM ranked\nORDER BY total_exec_time_ms_delta DESC\nLIMIT ${limit};",
+          "refId": "A"
+        }
+      ],
+      "title": "Top Queries by Total Time Delta",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "storage_pg"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 5,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "calls_delta"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "storage_pg"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH filtered AS (\n  SELECT *\n  FROM query_metric_snapshots\n  WHERE db_identifier = '${db_identifier}'\n    AND captured_at BETWEEN to_timestamp($__from / 1000.0) AND to_timestamp($__to / 1000.0)\n), start_snap AS (\n  SELECT *\n  FROM (\n    SELECT f.*, row_number() OVER (PARTITION BY queryid, dbid, userid ORDER BY captured_at ASC) AS rn\n    FROM filtered AS f\n  ) AS t\n  WHERE rn = 1\n), end_snap AS (\n  SELECT *\n  FROM (\n    SELECT f.*, row_number() OVER (PARTITION BY queryid, dbid, userid ORDER BY captured_at DESC) AS rn\n    FROM filtered AS f\n  ) AS t\n  WHERE rn = 1\n), deltas AS (\n  SELECT\n    e.queryid,\n    e.dbid,\n    e.userid,\n    left(e.query, 180) AS query,\n    GREATEST(e.calls - COALESCE(s.calls, e.calls), 0) AS calls_delta\n  FROM end_snap AS e\n  LEFT JOIN start_snap AS s USING (queryid, dbid, userid)\n)\nSELECT\n  queryid,\n  dbid,\n  userid,\n  query,\n  calls_delta\nFROM deltas\nWHERE calls_delta > 0\n  AND query IS NOT NULL\n  AND query !~* '^(BEGIN|COMMIT|ROLLBACK|SET\\s|SHOW\\s|UNLISTEN|CLOSE\\s|SELECT\\s+pg_)'\n  AND query NOT ILIKE '%query_metric_snapshots%'\n  AND query NOT ILIKE '%runtime_%'\nORDER BY calls_delta DESC\nLIMIT ${limit};",
+          "refId": "A"
+        }
+      ],
+      "title": "Top Queries by Calls Delta",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "storage_pg"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 6,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "storage_pg"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  min(captured_at) AS snapshot_start_at,\n  max(captured_at) AS snapshot_end_at,\n  EXTRACT(EPOCH FROM (now() - max(captured_at)))::bigint AS freshness_seconds,\n  count(*) AS rows_in_window,\n  count(DISTINCT queryid) AS distinct_queries\nFROM query_metric_snapshots\nWHERE db_identifier = '${db_identifier}'\n  AND captured_at BETWEEN to_timestamp($__from / 1000.0) AND to_timestamp($__to / 1000.0);",
+          "refId": "A"
+        }
+      ],
+      "title": "Window Coverage",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "storage_pg"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 7,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "mean_exec_time_ms_delta"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "storage_pg"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH filtered AS (\n  SELECT *\n  FROM query_metric_snapshots\n  WHERE db_identifier = '${db_identifier}'\n    AND captured_at BETWEEN to_timestamp($__from / 1000.0) AND to_timestamp($__to / 1000.0)\n), start_snap AS (\n  SELECT *\n  FROM (\n    SELECT f.*, row_number() OVER (PARTITION BY queryid, dbid, userid ORDER BY captured_at ASC) AS rn\n    FROM filtered AS f\n  ) AS t\n  WHERE rn = 1\n), end_snap AS (\n  SELECT *\n  FROM (\n    SELECT f.*, row_number() OVER (PARTITION BY queryid, dbid, userid ORDER BY captured_at DESC) AS rn\n    FROM filtered AS f\n  ) AS t\n  WHERE rn = 1\n), deltas AS (\n  SELECT\n    e.queryid,\n    e.dbid,\n    e.userid,\n    left(e.query, 180) AS query,\n    GREATEST(e.calls - COALESCE(s.calls, e.calls), 0) AS calls_delta,\n    CASE\n      WHEN GREATEST(e.calls - COALESCE(s.calls, e.calls), 0) = 0 THEN NULL\n      ELSE GREATEST(e.total_exec_time_ms - COALESCE(s.total_exec_time_ms, e.total_exec_time_ms), 0)\n        / NULLIF(GREATEST(e.calls - COALESCE(s.calls, e.calls), 0), 0)\n    END AS mean_exec_time_ms_delta\n  FROM end_snap AS e\n  LEFT JOIN start_snap AS s USING (queryid, dbid, userid)\n)\nSELECT\n  queryid,\n  dbid,\n  userid,\n  query,\n  calls_delta,\n  round(COALESCE(mean_exec_time_ms_delta, 0)::numeric, 2) AS mean_exec_time_ms_delta\nFROM deltas\nWHERE calls_delta >= 5\n  AND mean_exec_time_ms_delta IS NOT NULL\n  AND query IS NOT NULL\n  AND query !~* '^(BEGIN|COMMIT|ROLLBACK|SET\\s|SHOW\\s|UNLISTEN|CLOSE\\s|SELECT\\s+pg_)'\n  AND query NOT ILIKE '%query_metric_snapshots%'\n  AND query NOT ILIKE '%runtime_%'\nORDER BY mean_exec_time_ms_delta DESC\nLIMIT ${limit};",
+          "refId": "A"
+        }
+      ],
+      "title": "Top Queries by Mean Latency Delta",
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "pg-monitor",
+    "query-analytics"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "monitored_db@postgres:5432",
+          "value": "monitored_db@postgres:5432"
+        },
+        "datasource": {
+          "type": "postgres",
+          "uid": "storage_pg"
+        },
+        "definition": "SELECT DISTINCT db_identifier FROM query_metric_snapshots ORDER BY 1",
+        "hide": 0,
+        "includeAll": false,
+        "label": "db_identifier",
+        "multi": false,
+        "name": "db_identifier",
+        "options": [],
+        "query": "SELECT DISTINCT db_identifier FROM query_metric_snapshots ORDER BY 1",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "20",
+          "value": "20"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "limit",
+        "multi": false,
+        "name": "limit",
+        "options": [
+          {
+            "selected": true,
+            "text": "20",
+            "value": "20"
+          },
+          {
+            "selected": false,
+            "text": "50",
+            "value": "50"
+          },
+          {
+            "selected": false,
+            "text": "100",
+            "value": "100"
+          }
+        ],
+        "query": "20,50,100",
+        "skipUrlSync": false,
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timezone": "",
+  "title": "pg-monitor / Query Analytics",
+  "uid": "pg-monitor-query-analytics",
+  "version": 3,
+  "weekStart": ""
+}

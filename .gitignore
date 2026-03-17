@@ -6,5 +6,9 @@ dist/
 wheels/
 *.egg-info
 
+*.env.docker
+docker/alertmanager/alertmanager.yml
+
 # Virtual environments
 .venv
+.idea

@@ -1,6 +1,10 @@
 services:
   postgres:
     image: postgres:16-alpine
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_preload_libraries=pg_stat_statements"
     environment:
       POSTGRES_DB: postgres
       POSTGRES_USER: postgres
@@ -21,7 +25,7 @@ services:
       dockerfile: docker/app/Dockerfile
       target: migrator
     env_file:
-      - ../env/.env.docker.example
+      - ../env/.env.docker
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,7 +37,7 @@ services:
       dockerfile: docker/app/Dockerfile
       target: api
     env_file:
-      - ../env/.env.docker.example
+      - ../env/.env.docker
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,7 +52,7 @@ services:
       dockerfile: docker/app/Dockerfile
       target: worker
     env_file:
-      - ../env/.env.docker.example
+      - ../env/.env.docker
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,10 +64,39 @@ services:
     depends_on:
       api:
         condition: service_started
+      alertmanager:
+        condition: service_started
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
     volumes:
       - ../prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
     ports:
       - "9090:9090"
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    volumes:
+      - ../alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    depends_on:
+      prometheus:
+        condition: service_started
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_DEFAULT_THEME: light
+    volumes:
+      - ../grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ../grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"

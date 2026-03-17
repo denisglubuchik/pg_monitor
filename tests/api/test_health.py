@@ -20,3 +20,10 @@ def test_healthz_uses_incoming_request_id(client) -> None:
 
     assert response.status_code == 200
     assert response.headers[REQUEST_ID_HEADER] == "req-123"
+
+
+def test_openapi_endpoint_is_available(client) -> None:
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    assert response.json()["openapi"].startswith("3.")

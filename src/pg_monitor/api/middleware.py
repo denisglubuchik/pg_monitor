@@ -2,24 +2,20 @@ from __future__ import annotations
 
 import logging
 from time import perf_counter
-from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from pg_monitor.logging import reset_request_id, set_request_id
 from pg_monitor.metrics import service_metrics
 
-if TYPE_CHECKING:
-    from fastapi import FastAPI, Request, Response
-
 REQUEST_ID_HEADER = "X-Request-ID"
 _logger = logging.getLogger("pg_monitor.api")
 
 
-def register_middlewares(app: FastAPI) -> None:
+def register_middlewares(app) -> None:
     @app.middleware("http")
     async def request_context_middleware(
-        request: Request, call_next
-    ) -> Response:
+        request, call_next
+    ):
         incoming = (request.headers.get(REQUEST_ID_HEADER) or "").strip()
         request_id = incoming or uuid4().hex
         request.state.request_id = request_id
@@ -73,7 +69,7 @@ def register_middlewares(app: FastAPI) -> None:
             reset_request_id(token)
 
 
-def _resolve_metrics_path(request: Request) -> str:
+def _resolve_metrics_path(request) -> str:
     route = request.scope.get("route")
     if route is not None:
         route_path = getattr(route, "path", None)

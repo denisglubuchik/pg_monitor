@@ -25,22 +25,10 @@ ENV PYTHONPATH="/app/src"
 USER app
 
 FROM base AS api
-CMD [
-    "uv",
-    "run",
-    "uvicorn",
-    "pg_monitor.app:create_app",
-    "--factory",
-    "--host",
-    "0.0.0.0",
-    "--port",
-    "8000",
-    "--log-config",
-    "none"
-]
+CMD ["uv", "run", "--no-dev", "--frozen", "uvicorn", "pg_monitor.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
 
 FROM base AS worker
-CMD ["uv", "run", "pg-monitor-collector"]
+CMD ["uv", "run", "--no-dev", "--frozen", "pg-monitor-collector"]
 
 FROM base AS migrator
-CMD ["uv", "run", "alembic", "upgrade", "head"]
+CMD ["uv", "run", "--no-dev", "--frozen", "alembic", "upgrade", "head"]

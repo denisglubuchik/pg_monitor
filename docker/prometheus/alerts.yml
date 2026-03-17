@@ -1,0 +1,69 @@
+groups:
+  - name: pg-monitor-runtime
+    rules:
+      - alert: RuntimeSnapshotStale
+        expr: max by (db_identifier) (pg_monitor_runtime_snapshot_age_seconds) > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Runtime snapshot is stale for {{ $labels.db_identifier }}"
+          description: "Runtime metrics snapshot age is above 300s for more than 5m."
+
+      - alert: BlockedSessionsDetected
+        expr: max by (db_identifier) (pg_monitor_runtime_blocked_sessions) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Blocked sessions detected for {{ $labels.db_identifier }}"
+          description: "At least one blocked session is present for more than 2m."
+
+      - alert: LongTransactionDetected
+        expr: max by (db_identifier) (pg_monitor_runtime_longest_tx_duration_seconds) > 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Long transaction detected for {{ $labels.db_identifier }}"
+          description: "Longest transaction duration exceeds 60 seconds for more than 5m."
+
+      - alert: DeadlocksGrowing
+        expr: sum by (db_identifier) (increase(pg_monitor_runtime_db_deadlocks[10m])) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Deadlocks increased for {{ $labels.db_identifier }}"
+          description: "Deadlock counter grew in the last 10 minutes."
+
+  - name: pg-monitor-api
+    rules:
+      - alert: ApiHighErrorRate
+        expr: |
+          (
+            sum(rate(pg_monitor_http_requests_total{status_code=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(pg_monitor_http_requests_total[5m])), 1)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High API error rate"
+          description: "5xx error ratio is above 5% for 5 minutes."
+
+      - alert: ApiHighLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, path) (
+              rate(pg_monitor_http_request_duration_seconds_bucket{path!="/metrics"}[5m])
+            )
+          ) > 1.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency p95 on {{ $labels.path }}"
+          description: "95th percentile request duration is above 1.5 seconds for 5 minutes."

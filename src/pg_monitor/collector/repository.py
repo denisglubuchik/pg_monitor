@@ -44,10 +44,19 @@ async def create_pool(
 
 
 class AsyncpgCollectorRepository:
-    def __init__(self, pool: asyncpg.Pool) -> None:
+    def __init__(
+        self,
+        pool: asyncpg.Pool,
+        *,
+        db_identifier: str | None = None,
+    ) -> None:
         self._pool = pool
+        self._db_identifier = db_identifier
 
     async def fetch_db_identifier(self) -> str:
+        if self._db_identifier is not None:
+            return self._db_identifier
+
         row = await self._fetch_row(
             SQL_DB_IDENTIFIER,
             operation="db_identifier",
