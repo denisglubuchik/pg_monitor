@@ -59,6 +59,29 @@ services:
       migrator:
         condition: service_completed_successfully
 
+  loki:
+    image: grafana/loki:3.3.2
+    command:
+      - "-config.file=/etc/loki/loki.yml"
+    volumes:
+      - ../loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    command:
+      - "-config.file=/etc/promtail/promtail.yml"
+    depends_on:
+      loki:
+        condition: service_started
+    volumes:
+      - ../promtail/promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - promtail-positions:/tmp
+
   prometheus:
     image: prom/prometheus:v3.2.1
     depends_on:
@@ -99,6 +122,8 @@ services:
     depends_on:
       prometheus:
         condition: service_started
+      loki:
+        condition: service_started
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
@@ -109,3 +134,7 @@ services:
       - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "3000:3000"
+
+volumes:
+  loki-data:
+  promtail-positions:

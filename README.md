@@ -89,6 +89,17 @@
     - значения `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` подставляются в runtime при старте `alertmanager`;
   - локальный compose smoke-check пройден (`make up`, `make ps`, readiness Alertmanager, проверка `Prometheus -> Alertmanager`);
   - детальный план: `docs/iteration-5-plan.md`.
+- Итерация 6 завершена:
+  - в docker compose добавлены `loki` и `promtail`;
+  - включен provisioning datasource `Loki` (`uid=loki`) в Grafana;
+  - dashboard `Overview` дополнен logs panel и прямой ссылкой в `Explore`;
+  - добавлен dashboard `Service Metrics`:
+    - `pg_monitor_http_*` (throughput, error ratio, p95 latency, route-level panels);
+    - `process_*` и `python_gc_*`;
+    - фильтры `method` / `path` + лог-фильтры `service` / `level`;
+    - drilldown link в `Explore` Loki с сохранением диапазона времени;
+  - runbook расследования обновлен в `docs/logging-correlation.md`;
+  - детальный план: `docs/iteration-6-plan.md`.
 
 ## Query Analytics API
 
@@ -152,6 +163,7 @@ make up
 - API: `http://localhost:8000`
 - Prometheus: `http://localhost:9090` (`Status -> Targets` для проверки scrape)
 - Alertmanager: `http://localhost:9093`
+- Loki: `http://localhost:3100/ready`
 - Grafana: `http://localhost:3000` (`admin/admin`)
 
 Быстрые проверки локального стека:
@@ -160,11 +172,13 @@ make up
 make ps
 curl -fsS http://localhost:9093/-/ready
 curl -fsS http://localhost:9090/api/v1/alertmanagers
+curl -fsS http://localhost:3100/ready
 ```
 
 Текущий источник данных для панелей:
 - `Overview` читает Prometheus runtime/service метрики.
 - `Query Analytics` таблицы читают storage PostgreSQL datasource (`pg_monitor_storage`).
+- `Service Metrics` читает Prometheus + Loki и поддерживает drilldown `metrics -> Explore logs`.
 - ссылки `Weekly Top API (fixed 7d)` и `Week over Week API (fixed 7d)` на dashboard используются как API quick links.
 
 Набор скриптов для ручной генерации нагрузки:

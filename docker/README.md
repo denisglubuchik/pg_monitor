@@ -2,7 +2,7 @@
 
 Отдельная папка для Docker-артефактов проекта.
 
-Реализованная структура (итерации 3-5):
+Реализованная структура (итерации 3-6):
 
 ```text
 docker/
@@ -13,12 +13,17 @@ docker/
     compose.yaml
   env/
     .env.docker.example
+  loki/
+    loki.yml
+  promtail/
+    promtail.yml
   alertmanager/
     alertmanager.yml
   grafana/
     dashboards/
       overview.json
       query-analytics.json
+      service-metrics.json
     provisioning/
       dashboards/
         dashboards.yml
@@ -51,6 +56,8 @@ docker compose up --build
 - `collector` (worker со scheduler);
 - `prometheus` (scrape `api:8000/metrics`, UI на `http://localhost:9090`);
 - `alertmanager` (routing алертов, UI на `http://localhost:9093`);
+- `loki` (хранилище логов, ready-check: `http://localhost:3100/ready`);
+- `promtail` (ingest docker logs -> Loki, labels: `job`, `service`, `container`, `level`);
 - `grafana` (dashboards, UI на `http://localhost:3000`, `admin/admin`).
 
 Про dashboards:
@@ -61,6 +68,12 @@ docker compose up --build
   - top queries и coverage строятся SQL-запросами к storage DB (`pg_monitor_storage`);
   - API-ссылки `weekly-top` / `week-over-week` оставлены как quick links;
   - API поддерживает гибкие окна через `window_start_at` и `window_end_at`.
+- `Service Metrics`:
+  - HTTP/service метрики (`pg_monitor_http_*`, `process_*`, `python_gc_*`);
+  - фильтры `method`/`path`;
+  - logs panel по Loki (`service`/`level`) и drilldown в `Explore`.
+- `Overview`:
+  - дополнен logs panel (`api|collector|postgres`) и быстрым переходом в `Explore`.
 
 Telegram routing:
 - заполните `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID` в `docker/env/.env.docker.example` или в отдельном env-файле;
@@ -76,5 +89,7 @@ Telegram routing:
 Проверка, что в Grafana все подхватилось:
 1. `Connections -> Data sources`:
 - `Prometheus` (`uid=prometheus`);
+- `Loki` (`uid=loki`);
 - `Storage PostgreSQL` (`uid=storage_pg`).
 2. В dashboard `pg-monitor / Overview` должны быть переменные `db_identifier` и `datname`.
+3. В dashboard `pg-monitor / Service Metrics` доступны фильтры `method`, `path`, `service`, `level`.

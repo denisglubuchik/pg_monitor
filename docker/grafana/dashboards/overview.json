@@ -19,7 +19,18 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Explore Logs (api/collector/postgres)",
+      "type": "link",
+      "url": "/explore?orgId=1&left=%5B%22$__from%22,%22$__to%22,%22loki%22,%7B%22expr%22:%22%7Bservice%3D~%5C%22api%7Ccollector%7Cpostgres%5C%22%7D%22,%22refId%22:%22A%22%7D%5D"
+    }
+  ],
   "panels": [
     {
       "datasource": {
@@ -1257,6 +1268,43 @@
       ],
       "title": "Granted Locks (Trend)",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 48
+      },
+      "id": 17,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "{service=~\"api|collector|postgres\"}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Container Logs (api/collector/postgres)",
+      "type": "logs"
     }
   ],
   "refresh": "30s",
@@ -1334,6 +1382,6 @@
   "timezone": "",
   "title": "pg-monitor / Overview",
   "uid": "pg-monitor-overview",
-  "version": 4,
+  "version": 5,
   "weekStart": ""
 }
