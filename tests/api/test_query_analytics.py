@@ -54,9 +54,11 @@ def test_weekly_top_endpoint_returns_payload(client, monkeypatch) -> None:
         db_identifier: str,
         limit: int,
         sort_by: QuerySortBy,
+        window_start_at: datetime | None = None,
+        window_end_at: datetime | None = None,
         now: datetime | None = None,
     ) -> PeriodTopQueriesResult:
-        del self, now
+        del self, now, window_start_at, window_end_at
         return _build_period_result(
             db_identifier=db_identifier,
             limit=limit,
@@ -96,9 +98,11 @@ def test_week_over_week_endpoint_returns_payload(
         db_identifier: str,
         limit: int,
         sort_by: QuerySortBy,
+        window_start_at: datetime | None = None,
+        window_end_at: datetime | None = None,
         now: datetime | None = None,
     ) -> WeekOverWeekQueriesResult:
-        del self, now
+        del self, now, window_start_at, window_end_at
         return WeekOverWeekQueriesResult(
             db_identifier=db_identifier,
             sort_by=sort_by,
@@ -137,3 +141,19 @@ def test_week_over_week_endpoint_returns_payload(
     assert payload["sort_by"] == "calls_delta"
     assert payload["current_week"]["items"][0]["queryid"] == "q-current"
     assert payload["previous_week"]["items"][0]["queryid"] == "q-previous"
+
+
+def test_weekly_top_endpoint_requires_full_window_pair(client) -> None:
+    response = client.get(
+        "/analytics/queries/weekly-top",
+        params={
+            "db_identifier": "postgres@127.0.0.1:5432",
+            "window_start_at": "2026-03-01T00:00:00Z",
+        },
+    )
+
+    assert response.status_code == 422
+    assert (
+        response.json()["detail"]
+        == "window_start_at and window_end_at must be provided together"
+    )

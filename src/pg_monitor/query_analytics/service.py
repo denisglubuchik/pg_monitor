@@ -54,13 +54,18 @@ class QueryAnalyticsService:
         db_identifier: str,
         limit: int = 20,
         sort_by: QuerySortBy = QuerySortBy.TOTAL_EXEC_TIME_MS,
+        window_start_at: datetime | None = None,
+        window_end_at: datetime | None = None,
         now: datetime | None = None,
     ) -> PeriodTopQueriesResult:
-        window_end = now or datetime.now(UTC)
-        window_start = window_end - timedelta(days=7)
+        window = _resolve_current_window(
+            window_start_at=window_start_at,
+            window_end_at=window_end_at,
+            now=now,
+        )
         return await self.get_period_top_queries(
             db_identifier=db_identifier,
-            window=PeriodWindow(start_at=window_start, end_at=window_end),
+            window=window,
             limit=limit,
             sort_by=sort_by,
         )
@@ -71,15 +76,23 @@ class QueryAnalyticsService:
         db_identifier: str,
         limit: int = 20,
         sort_by: QuerySortBy = QuerySortBy.TOTAL_EXEC_TIME_MS,
+        window_start_at: datetime | None = None,
+        window_end_at: datetime | None = None,
         now: datetime | None = None,
     ) -> WeekOverWeekQueriesResult:
-        window_end = now or datetime.now(UTC)
-        current_start = window_end - timedelta(days=7)
-        previous_start = current_start - timedelta(days=7)
+        current_window = _resolve_current_window(
+            window_start_at=window_start_at,
+            window_end_at=window_end_at,
+            now=now,
+        )
+        current_start = current_window.start_at
+        window_end = current_window.end_at
+        duration = window_end - current_start
+        previous_start = current_start - duration
 
         current_week = await self.get_period_top_queries(
             db_identifier=db_identifier,
-            window=PeriodWindow(start_at=current_start, end_at=window_end),
+            window=current_window,
             limit=limit,
             sort_by=sort_by,
         )
@@ -165,3 +178,22 @@ def _sort_deltas(
         ),
         reverse=True,
     )
+
+
+def _resolve_current_window(
+    *,
+    window_start_at: datetime | None,
+    window_end_at: datetime | None,
+    now: datetime | None,
+) -> PeriodWindow:
+    if (window_start_at is None) != (window_end_at is None):
+        raise ValueError(
+            "window_start_at and window_end_at must be provided together"
+        )
+
+    if window_start_at is not None and window_end_at is not None:
+        return PeriodWindow(start_at=window_start_at, end_at=window_end_at)
+
+    resolved_end = now or datetime.now(UTC)
+    resolved_start = resolved_end - timedelta(days=7)
+    return PeriodWindow(start_at=resolved_start, end_at=resolved_end)

@@ -4,6 +4,8 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Self
 
+import pytest
+
 from pg_monitor.query_analytics import (
     PeriodWindow,
     QueryAnalyticsService,
@@ -200,3 +202,71 @@ def test_period_top_queries_sorted_by_calls() -> None:
     assert len(result.items) == 1
     assert result.items[0].queryid == "q1"
     assert result.items[0].calls_delta == 10
+
+
+def test_weekly_top_queries_accepts_custom_window() -> None:
+    start_at = datetime(2026, 3, 2, 0, 0, tzinfo=UTC)
+    end_at = datetime(2026, 3, 5, 0, 0, tzinfo=UTC)
+
+    start_point = QuerySnapshotPoint(
+        captured_at=start_at,
+        rows=[
+            _make_row(
+                captured_at=start_at,
+                queryid="q1",
+                calls=2,
+                total_exec_time_ms=20.0,
+            )
+        ],
+    )
+    end_point = QuerySnapshotPoint(
+        captured_at=end_at,
+        rows=[
+            _make_row(
+                captured_at=end_at,
+                queryid="q1",
+                calls=5,
+                total_exec_time_ms=80.0,
+            )
+        ],
+    )
+
+    repo = FakeQuerySnapshotRepository(
+        {
+            start_at: start_point,
+            end_at: end_point,
+        }
+    )
+    service = QueryAnalyticsService(FakeUnitOfWorkFactory(repo))
+
+    result = asyncio.run(
+        service.get_weekly_top_queries(
+            db_identifier="postgres@127.0.0.1:5432",
+            limit=10,
+            sort_by=QuerySortBy.TOTAL_EXEC_TIME_MS,
+            window_start_at=start_at,
+            window_end_at=end_at,
+        )
+    )
+
+    assert result.window.start_at == start_at
+    assert result.window.end_at == end_at
+    assert result.items[0].queryid == "q1"
+    assert result.items[0].calls_delta == 3
+
+
+def test_weekly_top_queries_requires_full_window_pair() -> None:
+    service = QueryAnalyticsService(
+        FakeUnitOfWorkFactory(FakeQuerySnapshotRepository({}))
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="window_start_at and window_end_at must be provided together",
+    ):
+        asyncio.run(
+            service.get_weekly_top_queries(
+                db_identifier="postgres@127.0.0.1:5432",
+                window_start_at=datetime(2026, 3, 1, 0, 0, tzinfo=UTC),
+            )
+        )
