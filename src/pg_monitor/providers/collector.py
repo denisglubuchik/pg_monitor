@@ -15,6 +15,7 @@ from pg_monitor.collector.repository import (
     AsyncpgCollectorRepository,
     create_pool,
 )
+from pg_monitor.collector.scheduler import CollectorScheduler
 from pg_monitor.config import CollectorSettings  # noqa: TC001
 from pg_monitor.storage import (
     StorageUnitOfWorkFactory,
@@ -74,6 +75,19 @@ class CollectorProvider(Provider):
         session_factory: async_sessionmaker[AsyncSession],
     ) -> StorageUnitOfWorkFactory:
         return StorageUnitOfWorkFactory(session_factory)
+
+    @provide(scope=Scope.APP)
+    def provide_collector_scheduler(
+        self,
+        settings: CollectorSettings,
+        repository: AsyncpgCollectorRepository,
+        storage_uow_factory: StorageUnitOfWorkFactory,
+    ) -> CollectorScheduler:
+        return CollectorScheduler(
+            settings=settings,
+            repository=repository,
+            storage_uow_factory=storage_uow_factory,
+        )
 
 
 def _build_db_identifier(dsn: str) -> str:

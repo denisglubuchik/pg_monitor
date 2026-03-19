@@ -15,10 +15,8 @@ from pg_monitor.config import (
 )
 from pg_monitor.logging import configure_logging
 from pg_monitor.providers.collector import CollectorProvider
-from pg_monitor.storage import StorageUnitOfWorkFactory
 
 from .errors import CollectorConnectionError
-from .repository import AsyncpgCollectorRepository
 from .scheduler import CollectorScheduler
 
 logger = logging.getLogger("pg_monitor.collector.worker")
@@ -59,17 +57,8 @@ async def run_worker(
     container: AsyncContainer | None = None
     scheduler: CollectorScheduler | None = None
     try:
-        scheduler = CollectorScheduler(worker_settings)
-        if hasattr(scheduler, "bind_dependencies"):
-            container = make_async_container(CollectorProvider(worker_settings))
-            repository = await container.get(AsyncpgCollectorRepository)
-            storage_uow_factory = await container.get(
-                StorageUnitOfWorkFactory
-            )
-            scheduler.bind_dependencies(
-                repository=repository,
-                storage_uow_factory=storage_uow_factory,
-            )
+        container = make_async_container(CollectorProvider(worker_settings))
+        scheduler = await container.get(CollectorScheduler)
         await _start_scheduler_with_retry(scheduler, worker_settings)
 
         logger.info(

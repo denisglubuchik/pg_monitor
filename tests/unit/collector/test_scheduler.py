@@ -62,11 +62,9 @@ class FakeUnitOfWorkFactory:
 def test_runtime_job_writes_runtime_snapshot(monkeypatch) -> None:
     runtime_repo = FakeRuntimeSnapshotsRepository()
     scheduler = CollectorScheduler(
-        CollectorSettings(
+        settings=CollectorSettings(
             pg_dsn="postgresql://user:password@localhost:5432/monitoring",
-        )
-    )
-    scheduler.bind_dependencies(
+        ),
         repository=FakeCollectorRepository(),
         storage_uow_factory=FakeUnitOfWorkFactory(runtime_repo),
     )
@@ -98,11 +96,9 @@ def test_runtime_job_writes_runtime_snapshot(monkeypatch) -> None:
 def test_scheduler_start_runs_preflight_checks(monkeypatch) -> None:
     runtime_repo = FakeRuntimeSnapshotsRepository()
     scheduler = CollectorScheduler(
-        CollectorSettings(
+        settings=CollectorSettings(
             pg_dsn="postgresql://user:password@localhost:5432/monitoring",
-        )
-    )
-    scheduler.bind_dependencies(
+        ),
         repository=FakeCollectorRepository(),
         storage_uow_factory=FakeUnitOfWorkFactory(runtime_repo),
     )

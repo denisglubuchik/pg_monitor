@@ -20,27 +20,21 @@ logger = logging.getLogger("pg_monitor.collector.scheduler")
 
 
 class CollectorScheduler:
-    def __init__(self, settings: CollectorSettings) -> None:
-        self._settings = settings
-        self._scheduler = AsyncIOScheduler(timezone="UTC")
-        self._repository: AsyncpgCollectorRepository | None = None
-        self._storage_uow_factory: StorageUnitOfWorkFactory | None = None
-        self._started = False
-
-    def bind_dependencies(
+    def __init__(
         self,
+        settings: CollectorSettings,
         repository: AsyncpgCollectorRepository,
         storage_uow_factory: StorageUnitOfWorkFactory,
     ) -> None:
+        self._settings = settings
+        self._scheduler = AsyncIOScheduler(timezone="UTC")
         self._repository = repository
         self._storage_uow_factory = storage_uow_factory
+        self._started = False
 
     async def start(self) -> None:
         if self._started:
             return
-        if self._repository is None or self._storage_uow_factory is None:
-            msg = "collector scheduler dependencies are not initialized"
-            raise RuntimeError(msg)
 
         await self._preflight_dependencies()
 
@@ -94,9 +88,6 @@ class CollectorScheduler:
         )
 
     async def _run_runtime_job(self) -> None:
-        if self._repository is None or self._storage_uow_factory is None:
-            return
-
         try:
             snapshot = await asyncio.wait_for(
                 collect_runtime_once(self._repository),
@@ -146,9 +137,6 @@ class CollectorScheduler:
         )
 
     async def _run_queries_job(self) -> None:
-        if self._repository is None or self._storage_uow_factory is None:
-            return
-
         try:
             snapshot = await asyncio.wait_for(
                 collect_queries_once(self._repository),
@@ -198,9 +186,6 @@ class CollectorScheduler:
         )
 
     async def _preflight_dependencies(self) -> None:
-        if self._repository is None or self._storage_uow_factory is None:
-            return
-
         try:
             await self._repository.fetch_db_identifier()
         except CollectorError:

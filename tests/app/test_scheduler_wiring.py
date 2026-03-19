@@ -37,18 +37,22 @@ def test_worker_starts_and_stops_scheduler(monkeypatch) -> None:
     events: list[str] = []
 
     class DummyScheduler:
-        def __init__(self, settings: CollectorSettings) -> None:
-            self._settings = settings
-
         async def start(self) -> None:
             events.append("start")
 
         async def shutdown(self) -> None:
             events.append("shutdown")
 
+    class DummyContainer:
+        async def get(self, _dependency):
+            return DummyScheduler()
+
+        async def close(self) -> None:
+            return None
+
     monkeypatch.setattr(
-        "pg_monitor.collector.worker.CollectorScheduler",
-        DummyScheduler,
+        "pg_monitor.collector.worker.make_async_container",
+        lambda _provider: DummyContainer(),
     )
 
     stop_event = asyncio.Event()
@@ -69,20 +73,15 @@ def test_worker_starts_and_stops_scheduler(monkeypatch) -> None:
 
 def test_worker_exits_when_scheduler_disabled(monkeypatch) -> None:
     events: list[str] = []
+    container_called = {"value": False}
 
-    class DummyScheduler:
-        def __init__(self, settings: CollectorSettings) -> None:
-            self._settings = settings
-
-        async def start(self) -> None:
-            events.append("start")
-
-        async def shutdown(self) -> None:
-            events.append("shutdown")
+    def _fake_make_async_container(_provider):
+        container_called["value"] = True
+        return None
 
     monkeypatch.setattr(
-        "pg_monitor.collector.worker.CollectorScheduler",
-        DummyScheduler,
+        "pg_monitor.collector.worker.make_async_container",
+        _fake_make_async_container,
     )
 
     asyncio.run(
@@ -96,6 +95,7 @@ def test_worker_exits_when_scheduler_disabled(monkeypatch) -> None:
     )
 
     assert events == []
+    assert container_called["value"] is False
 
 
 def test_worker_retries_scheduler_startup_on_connection_error(
@@ -106,9 +106,6 @@ def test_worker_retries_scheduler_startup_on_connection_error(
     sleep_calls: list[float] = []
 
     class DummyScheduler:
-        def __init__(self, settings: CollectorSettings) -> None:
-            self._settings = settings
-
         async def start(self) -> None:
             attempts["count"] += 1
             if attempts["count"] < 3:
@@ -118,12 +115,19 @@ def test_worker_retries_scheduler_startup_on_connection_error(
         async def shutdown(self) -> None:
             events.append("shutdown")
 
+    class DummyContainer:
+        async def get(self, _dependency):
+            return DummyScheduler()
+
+        async def close(self) -> None:
+            return None
+
     async def fake_sleep(seconds: float) -> None:
         sleep_calls.append(seconds)
 
     monkeypatch.setattr(
-        "pg_monitor.collector.worker.CollectorScheduler",
-        DummyScheduler,
+        "pg_monitor.collector.worker.make_async_container",
+        lambda _provider: DummyContainer(),
     )
     monkeypatch.setattr("pg_monitor.collector.worker.asyncio.sleep", fake_sleep)
 
