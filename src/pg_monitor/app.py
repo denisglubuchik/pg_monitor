@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
+import uvicorn
 from dishka import make_async_container
 from dishka.integrations.fastapi import FastapiProvider, setup_dishka
 from fastapi import FastAPI
@@ -54,3 +55,9 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
 def _load_runtime_settings() -> ApiSettings:
     env_path = resolve_settings_paths()
     return load_api_settings(env_path=env_path)
+
+
+def run() -> None:
+    settings = _load_runtime_settings()
+    app = create_app(settings)
+    uvicorn.run(app, host=settings.host, port=settings.port)

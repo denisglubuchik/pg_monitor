@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import os
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, Mapping, TypeVar
+from typing import Mapping, TypeVar, cast
 
+from dotenv import dotenv_values
 from pydantic import PostgresDsn, ValidationError, field_validator
 from pydantic_settings import (
     BaseSettings,
@@ -144,10 +144,18 @@ def _load_settings(
         raise ConfigurationError(f".env file not found: {dotenv_file}")
 
     try:
-        with _override_environ(environ):
+        if environ is None:
             return settings_cls(
                 _env_file=dotenv_file,
             )
+        init_values = _build_settings_init_values(
+            dotenv_file=dotenv_file,
+            environ=environ,
+        )
+        return cast(
+            "TSettings",
+            _build_isolated_settings(settings_cls, init_values),
+        )
     except ValidationError as exc:
         raise ConfigurationError(str(exc)) from exc
 
@@ -166,17 +174,51 @@ def load_collector_settings(
     return _load_settings(CollectorSettings, env_path=env_path, environ=environ)
 
 
-@contextmanager
-def _override_environ(environ: Mapping[str, str] | None) -> Iterator[None]:
-    if environ is None:
-        yield
-        return
+def _build_settings_init_values(
+    *,
+    dotenv_file: Path,
+    environ: Mapping[str, str],
+) -> dict[str, str]:
+    env_prefix = "PG_MONITOR_"
+    values: dict[str, str] = {}
 
-    previous = os.environ.copy()
-    try:
-        os.environ.clear()
-        os.environ.update(environ)
-        yield
-    finally:
-        os.environ.clear()
-        os.environ.update(previous)
+    if dotenv_file.exists():
+        dotenv_items = dotenv_values(dotenv_file)
+        for key, value in dotenv_items.items():
+            if key is None or value is None:
+                continue
+            upper_key = key.upper()
+            if upper_key.startswith(env_prefix):
+                field_name = upper_key[len(env_prefix) :].lower()
+                values[field_name] = value
+
+    for key, value in environ.items():
+        upper_key = key.upper()
+        if upper_key.startswith(env_prefix):
+            field_name = upper_key[len(env_prefix) :].lower()
+            values[field_name] = value
+
+    return values
+
+
+def _build_isolated_settings(
+    settings_cls: type[TSettings],
+    init_values: Mapping[str, str],
+) -> TSettings:
+    class IsolatedSettings(settings_cls):
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            del settings_cls
+            del env_settings
+            del dotenv_settings
+            del file_secret_settings
+            return (init_settings,)
+
+    return IsolatedSettings(**init_values)

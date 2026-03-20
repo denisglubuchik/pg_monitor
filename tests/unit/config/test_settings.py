@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from pg_monitor.config import (
@@ -147,3 +149,23 @@ def test_collector_settings_reject_non_positive_job_timeout(
         ConfigurationError, match="runtime_job_timeout_seconds"
     ):
         load_collector_settings(env_path=env_file, environ={})
+
+
+def test_load_settings_with_environ_does_not_mutate_os_environ(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("PG_MONITOR_APP_NAME", "process-env-value")
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "PG_MONITOR_APP_NAME=dotenv-value\n",
+        encoding="utf-8",
+    )
+
+    settings = load_api_settings(
+        env_path=env_file,
+        environ={"PG_MONITOR_APP_NAME": "explicit-environ-value"},
+    )
+
+    assert settings.app_name == "explicit-environ-value"
+    assert os.environ["PG_MONITOR_APP_NAME"] == "process-env-value"
