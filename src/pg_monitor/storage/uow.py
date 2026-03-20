@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
 
+from sqlalchemy.exc import SQLAlchemyError
+
+from .errors import StorageError, StorageWriteError
 from .repositories import QuerySnapshotRepository, RuntimeSnapshotRepository
 
 if TYPE_CHECKING:
@@ -59,9 +62,20 @@ class StorageUnitOfWork:
 
         try:
             if exc_type is None:
-                await self._session.commit()
+                try:
+                    await self._session.commit()
+                except SQLAlchemyError as commit_exc:
+                    raise StorageWriteError(
+                        f"failed to commit storage transaction: {commit_exc}"
+                    ) from commit_exc
             else:
-                await self._session.rollback()
+                try:
+                    await self._session.rollback()
+                except SQLAlchemyError as rollback_exc:
+                    raise StorageError(
+                        "failed to rollback storage transaction: "
+                        f"{rollback_exc}"
+                    ) from rollback_exc
         finally:
             await self._session.close()
             self._session = None

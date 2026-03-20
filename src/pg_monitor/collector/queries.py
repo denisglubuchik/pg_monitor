@@ -15,6 +15,10 @@ SELECT EXISTS (
 ) AS is_available
 """
 
+SQL_PING = """
+SELECT 1 AS ok
+"""
+
 SQL_RUNTIME_ACTIVITY = """
 SELECT
     COUNT(*) FILTER (WHERE state = 'active')::bigint AS active_connections,
@@ -66,4 +70,5 @@ SELECT
     shared_blks_written
 FROM pg_stat_statements
 WHERE queryid IS NOT NULL
+  AND toplevel
 """

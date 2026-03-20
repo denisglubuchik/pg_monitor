@@ -76,7 +76,7 @@ class CollectorScheduler:
         if not self._started:
             return
 
-        self._scheduler.shutdown(wait=False)
+        self._scheduler.shutdown(wait=True)
         self._scheduler.remove_all_jobs()
         self._started = False
 
@@ -187,7 +187,7 @@ class CollectorScheduler:
 
     async def _preflight_dependencies(self) -> None:
         try:
-            await self._repository.fetch_db_identifier()
+            await self._repository.ping()
         except CollectorError:
             raise
 

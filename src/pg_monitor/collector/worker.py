@@ -57,9 +57,10 @@ async def run_worker(
     container: AsyncContainer | None = None
     scheduler: CollectorScheduler | None = None
     try:
-        container = make_async_container(CollectorProvider(worker_settings))
-        scheduler = await container.get(CollectorScheduler)
-        await _start_scheduler_with_retry(scheduler, worker_settings)
+        (
+            container,
+            scheduler,
+        ) = await _build_and_start_scheduler_with_retry(worker_settings)
 
         logger.info(
             "collector_worker_started",
@@ -94,19 +95,25 @@ def _register_signal_handlers(stop_event: asyncio.Event) -> None:
             loop.add_signal_handler(sig, stop_event.set)
 
 
-async def _start_scheduler_with_retry(
-    scheduler: CollectorScheduler,
+async def _build_and_start_scheduler_with_retry(
     settings: CollectorSettings,
-) -> None:
+) -> tuple[AsyncContainer, CollectorScheduler]:
     delay = settings.collector_startup_retry_base_delay_seconds
     max_attempts = settings.collector_startup_retry_attempts
     max_delay = settings.collector_startup_retry_max_delay_seconds
 
     for attempt in range(1, max_attempts + 1):
+        container: AsyncContainer | None = None
+        scheduler: CollectorScheduler | None = None
         try:
+            container = make_async_container(CollectorProvider(settings))
+            scheduler = await container.get(CollectorScheduler)
             await scheduler.start()
-            return
+            return container, scheduler
         except CollectorConnectionError as exc:
+            if container is not None:
+                await _close_container(container)
+
             if attempt >= max_attempts:
                 logger.exception(
                     "collector_scheduler_startup_failed",
@@ -129,6 +136,9 @@ async def _start_scheduler_with_retry(
             )
             await asyncio.sleep(delay)
             delay = min(delay * 2, max_delay)
+
+    msg = "collector scheduler startup retry loop exhausted unexpectedly"
+    raise RuntimeError(msg)
 
 
 async def _close_container(container: AsyncContainer) -> None:

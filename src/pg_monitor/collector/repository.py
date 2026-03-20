@@ -8,6 +8,7 @@ from .errors import CollectorConnectionError, CollectorQueryError
 from .queries import (
     SQL_CHECK_PG_STAT_STATEMENTS,
     SQL_DB_IDENTIFIER,
+    SQL_PING,
     SQL_QUERY_STATEMENTS,
     SQL_RUNTIME_ACTIVITY,
     SQL_RUNTIME_DATABASE,
@@ -66,6 +67,9 @@ class AsyncpgCollectorRepository:
         port = int(row.get("port") or 0)
         return f"{db_name}@{host}:{port}"
 
+    async def ping(self) -> None:
+        await self._fetch_row(SQL_PING, operation="ping")
+
     async def is_pg_stat_statements_available(self) -> bool:
         row = await self._fetch_row(
             SQL_CHECK_PG_STAT_STATEMENTS,
@@ -89,6 +93,41 @@ class AsyncpgCollectorRepository:
         return await self._fetch_rows(
             SQL_QUERY_STATEMENTS,
             operation="query_statements",
+        )
+
+    async def fetch_runtime_rows(
+        self,
+    ) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
+        try:
+            async with self._pool.acquire() as connection:
+                async with connection.transaction(
+                    isolation="repeatable_read",
+                    readonly=True,
+                ):
+                    activity_row = await connection.fetchrow(
+                        SQL_RUNTIME_ACTIVITY
+                    )
+                    locks_row = await connection.fetchrow(SQL_RUNTIME_LOCKS)
+                    database_rows = await connection.fetch(SQL_RUNTIME_DATABASE)
+        except (OSError, asyncpg.PostgresConnectionError) as exc:
+            raise CollectorConnectionError(
+                _connection_error_message("runtime_bundle", exc)
+            ) from exc
+        except asyncpg.PostgresError as exc:
+            error_message = _query_error_message("runtime_bundle", exc)
+            raise CollectorQueryError(error_message) from exc
+
+        if activity_row is None:
+            msg = "collector query returned no rows during runtime_activity"
+            raise CollectorQueryError(msg)
+        if locks_row is None:
+            msg = "collector query returned no rows during runtime_locks"
+            raise CollectorQueryError(msg)
+
+        return (
+            dict(activity_row),
+            dict(locks_row),
+            [dict(row) for row in database_rows],
         )
 
     async def _fetch_row(

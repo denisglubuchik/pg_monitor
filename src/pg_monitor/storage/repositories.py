@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bisect import bisect_right
 from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, func, select
@@ -107,6 +108,89 @@ class QuerySnapshotRepository:
             raise StorageReadError(
                 f"failed to load query snapshots for analytics: {exc}"
             ) from exc
+
+    async def get_latest_snapshots_at_or_before(
+        self,
+        *,
+        db_identifier: str,
+        timestamps: list[datetime],
+    ) -> dict[datetime, QuerySnapshotPoint | None]:
+        if not timestamps:
+            return {}
+
+        ordered_unique = list(dict.fromkeys(timestamps))
+        max_ts = max(ordered_unique)
+        try:
+            captured_ats = list(
+                await self._session.scalars(
+                    select(QueryMetricSnapshotOrm.captured_at)
+                    .where(
+                        QueryMetricSnapshotOrm.db_identifier == db_identifier,
+                        QueryMetricSnapshotOrm.captured_at <= max_ts,
+                    )
+                    .distinct()
+                    .order_by(QueryMetricSnapshotOrm.captured_at)
+                )
+            )
+            if not captured_ats:
+                return {ts: None for ts in ordered_unique}
+
+            resolved_boundaries: dict[datetime, datetime | None] = {}
+            for ts in ordered_unique:
+                boundary_index = bisect_right(captured_ats, ts) - 1
+                resolved_boundaries[ts] = (
+                    None
+                    if boundary_index < 0
+                    else captured_ats[boundary_index]
+                )
+
+            needed_captured_ats = sorted({
+                item
+                for item in resolved_boundaries.values()
+                if item is not None
+            })
+            if not needed_captured_ats:
+                return {ts: None for ts in ordered_unique}
+
+            orm_rows = list(
+                await self._session.scalars(
+                    select(QueryMetricSnapshotOrm)
+                    .where(
+                        QueryMetricSnapshotOrm.db_identifier == db_identifier,
+                        QueryMetricSnapshotOrm.captured_at.in_(
+                            needed_captured_ats
+                        ),
+                    )
+                    .order_by(
+                        QueryMetricSnapshotOrm.captured_at,
+                        QueryMetricSnapshotOrm.queryid,
+                        QueryMetricSnapshotOrm.dbid,
+                        QueryMetricSnapshotOrm.userid,
+                    )
+                )
+            )
+        except SQLAlchemyError as exc:
+            raise StorageReadError(
+                f"failed to load query snapshots for analytics: {exc}"
+            ) from exc
+
+        grouped_rows: dict[datetime, list[QuerySnapshotRow]] = {
+            ts: [] for ts in needed_captured_ats
+        }
+        for row in orm_rows:
+            grouped_rows[row.captured_at].append(QuerySnapshotRow.from_orm(row))
+
+        result: dict[datetime, QuerySnapshotPoint | None] = {}
+        for ts in ordered_unique:
+            boundary = resolved_boundaries[ts]
+            if boundary is None:
+                result[ts] = None
+                continue
+            result[ts] = QuerySnapshotPoint(
+                captured_at=boundary,
+                rows=grouped_rows[boundary],
+            )
+        return result
 
 
 class RuntimeSnapshotRepository:
@@ -262,6 +346,9 @@ class RuntimeSnapshotRepository:
                 "waiting_locks": statement.excluded.waiting_locks,
                 "granted_locks": statement.excluded.granted_locks,
             },
+            where=(
+                statement.excluded.captured_at >= RuntimeCurrentOrm.captured_at
+            ),
         )
         await self._session.execute(statement)
 
@@ -269,6 +356,17 @@ class RuntimeSnapshotRepository:
         self,
         snapshot: RuntimeSnapshotResult,
     ) -> None:
+        latest_current_ts = await self._session.scalar(
+            select(RuntimeCurrentOrm.captured_at).where(
+                RuntimeCurrentOrm.db_identifier == snapshot.db_identifier
+            )
+        )
+        if (
+            latest_current_ts is not None
+            and latest_current_ts > snapshot.captured_at
+        ):
+            return
+
         datnames = [row.datname for row in snapshot.database]
         if datnames:
             await self._session.execute(
@@ -315,5 +413,9 @@ class RuntimeSnapshotRepository:
                 "blks_hit": statement.excluded.blks_hit,
                 "deadlocks": statement.excluded.deadlocks,
             },
+            where=(
+                statement.excluded.captured_at
+                >= RuntimeDatabaseCurrentOrm.captured_at
+            ),
         )
         await self._session.execute(statement)

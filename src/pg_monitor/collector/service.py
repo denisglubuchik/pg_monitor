@@ -38,6 +38,11 @@ class CollectorRepository(Protocol):
 
     async def fetch_statement_rows(self) -> list[dict[str, object]]: ...
 
+    async def fetch_runtime_rows(
+        self,
+    ) -> tuple[dict[str, object], dict[str, object], list[dict[str, object]]]:
+        ...
+
 
 NowProvider = Callable[[], datetime]
 
@@ -68,9 +73,9 @@ async def collect_runtime_once(
 
     try:
         db_identifier = await repository.fetch_db_identifier()
-        activity_row = await repository.fetch_activity_row()
-        locks_row = await repository.fetch_locks_row()
-        database_rows = await repository.fetch_database_rows()
+        activity_row, locks_row, database_rows = await _load_runtime_rows(
+            repository
+        )
 
         result = RuntimeSnapshotResult(
             captured_at=captured_at,
@@ -201,3 +206,16 @@ def _log_collector_failure(
             "error_type": error_type,
         },
     )
+
+
+async def _load_runtime_rows(
+    repository: CollectorRepository,
+) -> tuple[dict[str, object], dict[str, object], list[dict[str, object]]]:
+    runtime_loader = getattr(repository, "fetch_runtime_rows", None)
+    if callable(runtime_loader):
+        return await runtime_loader()
+
+    activity_row = await repository.fetch_activity_row()
+    locks_row = await repository.fetch_locks_row()
+    database_rows = await repository.fetch_database_rows()
+    return activity_row, locks_row, database_rows

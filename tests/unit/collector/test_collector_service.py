@@ -45,6 +45,15 @@ class FakeCollectorRepository:
             }
         ]
 
+    async def fetch_runtime_rows(
+        self,
+    ) -> tuple[dict[str, object], dict[str, object], list[dict[str, object]]]:
+        return (
+            await self.fetch_activity_row(),
+            await self.fetch_locks_row(),
+            await self.fetch_database_rows(),
+        )
+
     async def fetch_statement_rows(self) -> list[dict[str, object]]:
         return [
             {
@@ -120,6 +129,57 @@ def test_collect_runtime_once_fails_on_invalid_row_shape() -> None:
         assert "runtime cycle failed" in str(exc)
     else:
         raise AssertionError("CollectorQueryError was not raised")
+
+
+def test_collect_runtime_once_uses_runtime_bundle_when_available() -> None:
+    class BundleRepository(FakeCollectorRepository):
+        def __init__(self) -> None:
+            super().__init__()
+            self.bundle_calls = 0
+
+        async def fetch_runtime_rows(
+            self,
+        ) -> tuple[
+            dict[str, object],
+            dict[str, object],
+            list[dict[str, object]],
+        ]:
+            self.bundle_calls += 1
+            return (
+                {
+                    "active_connections": 3,
+                    "blocked_sessions": 1,
+                    "longest_tx_duration_s": 12.5,
+                },
+                {"waiting_locks": 2, "granted_locks": 9},
+                [
+                    {
+                        "datid": 123,
+                        "datname": "postgres",
+                        "numbackends": 4,
+                        "xact_commit": 100,
+                        "xact_rollback": 2,
+                        "blks_read": 20,
+                        "blks_hit": 99,
+                        "deadlocks": 0,
+                    }
+                ],
+            )
+
+        async def fetch_activity_row(self) -> dict[str, object]:
+            raise AssertionError("fetch_activity_row should not be used")
+
+        async def fetch_locks_row(self) -> dict[str, object]:
+            raise AssertionError("fetch_locks_row should not be used")
+
+        async def fetch_database_rows(self) -> list[dict[str, object]]:
+            raise AssertionError("fetch_database_rows should not be used")
+
+    repo = BundleRepository()
+    snapshot = asyncio.run(collect_runtime_once(repo))
+
+    assert snapshot.db_identifier == "postgres@127.0.0.1:5432"
+    assert repo.bundle_calls == 1
 
 
 def test_collect_queries_once_fails_on_invalid_row_shape() -> None:

@@ -14,6 +14,12 @@ from pg_monitor.config import CollectorSettings
 
 
 class FakeCollectorRepository:
+    def __init__(self) -> None:
+        self.ping_calls = 0
+
+    async def ping(self) -> None:
+        self.ping_calls += 1
+
     async def fetch_db_identifier(self) -> str:
         return "postgres@127.0.0.1:5432"
 
@@ -61,11 +67,12 @@ class FakeUnitOfWorkFactory:
 
 def test_runtime_job_writes_runtime_snapshot(monkeypatch) -> None:
     runtime_repo = FakeRuntimeSnapshotsRepository()
+    collector_repo = FakeCollectorRepository()
     scheduler = CollectorScheduler(
         settings=CollectorSettings(
             pg_dsn="postgresql://user:password@localhost:5432/monitoring",
         ),
-        repository=FakeCollectorRepository(),
+        repository=collector_repo,
         storage_uow_factory=FakeUnitOfWorkFactory(runtime_repo),
     )
 
@@ -95,11 +102,12 @@ def test_runtime_job_writes_runtime_snapshot(monkeypatch) -> None:
 
 def test_scheduler_start_runs_preflight_checks(monkeypatch) -> None:
     runtime_repo = FakeRuntimeSnapshotsRepository()
+    collector_repo = FakeCollectorRepository()
     scheduler = CollectorScheduler(
         settings=CollectorSettings(
             pg_dsn="postgresql://user:password@localhost:5432/monitoring",
         ),
-        repository=FakeCollectorRepository(),
+        repository=collector_repo,
         storage_uow_factory=FakeUnitOfWorkFactory(runtime_repo),
     )
 
@@ -111,3 +119,4 @@ def test_scheduler_start_runs_preflight_checks(monkeypatch) -> None:
         await scheduler.shutdown()
 
     asyncio.run(_run())
+    assert collector_repo.ping_calls == 1
