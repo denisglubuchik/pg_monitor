@@ -5,7 +5,7 @@ from time import perf_counter
 from uuid import uuid4
 
 from pg_monitor.logging import reset_request_id, set_request_id
-from pg_monitor.metrics import service_metrics
+from pg_monitor.metrics import ServiceMetrics
 
 REQUEST_ID_HEADER = "X-Request-ID"
 UNMATCHED_ROUTE_LABEL = "/__unmatched__"
@@ -23,6 +23,7 @@ def register_middlewares(app) -> None:
 
         token = set_request_id(request_id)
         started_at = perf_counter()
+        service_metrics = await _get_service_metrics(request)
 
         try:
             response = await call_next(request)
@@ -77,3 +78,18 @@ def _resolve_metrics_path(request) -> str:
         if route_path:
             return str(route_path)
     return UNMATCHED_ROUTE_LABEL
+
+
+async def _get_service_metrics(request) -> ServiceMetrics:
+    cached = getattr(request.app.state, "service_metrics", None)
+    if cached is not None:
+        return cached
+
+    container = getattr(request.app.state, "dishka_container", None)
+    if container is None:
+        msg = "dishka container is not configured on application state"
+        raise RuntimeError(msg)
+
+    service_metrics = await container.get(ServiceMetrics)
+    request.app.state.service_metrics = service_metrics
+    return service_metrics

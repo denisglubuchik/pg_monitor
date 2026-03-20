@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from .api_service_metrics import ServiceMetrics
     from .runtime_models import RuntimeMetricsState
 
 try:
@@ -15,9 +16,6 @@ try:
 except ImportError:  # pragma: no cover - fallback path
     _PROMETHEUS_CLIENT_AVAILABLE = False
     CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
-
-from .api_service_metrics import service_metrics
-
 
 class _RuntimeGaugeSet:
     def __init__(self, registry: CollectorRegistry) -> None:
@@ -96,8 +94,8 @@ class _RuntimeGaugeSet:
 
 
 class RuntimeMetricsExporter:
-    def __init__(self) -> None:
-        pass
+    def __init__(self, service_metrics: "ServiceMetrics") -> None:
+        self._service_metrics = service_metrics
 
     def render(
         self,
@@ -161,7 +159,7 @@ class RuntimeMetricsExporter:
                 gauges.db_deadlocks.labels(**db_labels).set(db.deadlocks)
 
         runtime_payload = generate_latest(runtime_registry).decode("utf-8")
-        service_payload = generate_latest(service_metrics.registry).decode(
+        service_payload = generate_latest(self._service_metrics.registry).decode(
             "utf-8"
         )
         return _merge_prometheus_payloads(runtime_payload, service_payload)

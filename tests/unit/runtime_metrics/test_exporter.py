@@ -8,12 +8,12 @@ from pg_monitor.metrics import (
     RuntimeDatabaseMetrics,
     RuntimeMetricsExporter,
     RuntimeMetricsState,
+    ServiceMetrics,
 )
-from pg_monitor.metrics.api_service_metrics import service_metrics
 
 
 def test_exporter_renders_runtime_metrics() -> None:
-    exporter = RuntimeMetricsExporter()
+    exporter = RuntimeMetricsExporter(ServiceMetrics())
     payload = exporter.render(
         states=[
             RuntimeMetricsState(
@@ -49,6 +49,7 @@ def test_exporter_renders_runtime_metrics() -> None:
 
 
 def test_exporter_keeps_runtime_metrics_outside_service_registry() -> None:
-    RuntimeMetricsExporter()
+    service_metrics = ServiceMetrics()
+    RuntimeMetricsExporter(service_metrics)
     payload = generate_latest(service_metrics.registry).decode("utf-8")
     assert "pg_monitor_runtime_active_connections" not in payload

@@ -13,6 +13,7 @@ from pg_monitor.config import ApiSettings  # noqa: TC001
 from pg_monitor.metrics import (
     RuntimeMetricsExporter,
     RuntimeMetricsService,
+    ServiceMetrics,
 )
 from pg_monitor.query_analytics import QueryAnalyticsService
 from pg_monitor.storage import (
@@ -69,5 +70,12 @@ class AppProvider(Provider):
         return RuntimeMetricsService(uow_factory)
 
     @provide(scope=Scope.APP)
-    def provide_runtime_metrics_exporter(self) -> RuntimeMetricsExporter:
-        return RuntimeMetricsExporter()
+    def provide_service_metrics(self) -> ServiceMetrics:
+        return ServiceMetrics()
+
+    @provide(scope=Scope.APP)
+    def provide_runtime_metrics_exporter(
+        self,
+        service_metrics: ServiceMetrics,
+    ) -> RuntimeMetricsExporter:
+        return RuntimeMetricsExporter(service_metrics)

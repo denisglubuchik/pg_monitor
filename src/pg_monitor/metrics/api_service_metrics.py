@@ -48,6 +48,3 @@ class ServiceMetrics:
         self.http_request_duration_seconds.labels(**labels).observe(
             max(duration_seconds, 0.0)
         )
-
-
-service_metrics = ServiceMetrics()
