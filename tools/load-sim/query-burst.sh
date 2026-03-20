@@ -7,11 +7,13 @@ source "${SCRIPT_DIR}/common.sh"
 
 ITERATIONS="${1:-500}"
 if ! [[ "${ITERATIONS}" =~ ^[0-9]+$ ]] || [[ "${ITERATIONS}" -le 0 ]]; then
-  echo "usage: $0 [positive_iterations]" >&2
+  echo "usage: $0 [positive_iterations] [target_db]" >&2
   exit 1
 fi
 
-cat <<SQL | compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d monitored_db
+TARGET_DB_NAME="$(resolve_target_db "${2:-}")"
+
+cat <<SQL | run_sql "${TARGET_DB_NAME}"
 SELECT format(
   'INSERT INTO load_events(payload) VALUES (md5(random()::text));
    UPDATE load_events
@@ -22,4 +24,4 @@ SELECT format(
 FROM generate_series(1, ${ITERATIONS})\gexec
 SQL
 
-echo "query burst completed: ${ITERATIONS} iterations"
+echo "query burst completed: ${ITERATIONS} iterations in ${TARGET_DB_NAME}"

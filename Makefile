@@ -11,6 +11,11 @@ QUERY_ITERATIONS ?= 1000
 HTTP_REQUESTS ?= 300
 BASE_URL ?= http://localhost:8000
 LOCK_SECONDS ?= 300
+TARGET_DB ?= monitored_db
+TARGET_PG_DSN ?=
+COMPOSE_DB_SERVICE ?=
+TARGET_DB_IDENTIFIER ?=
+LOAD_HTTP_TARGET ?= $(if $(strip $(TARGET_DB_IDENTIFIER)),$(TARGET_DB_IDENTIFIER),$(TARGET_DB))
 
 help:
 	@echo "Available targets:"
@@ -23,17 +28,20 @@ help:
 	@echo "  make lint                   - run ruff checks"
 	@echo "  make test                   - run unit/API tests"
 	@echo "  make test-integration       - run integration tests"
-	@echo "  make load-setup             - prepare monitored_db for load simulation"
-	@echo "  make load-query             - run SQL query burst"
-	@echo "  make load-http              - run HTTP burst against API"
-	@echo "  make load-lock-holder       - hold row lock (run in one terminal)"
-	@echo "  make load-lock-waiter       - wait on row lock (run in another terminal)"
+	@echo "  make load-setup             - prepare TARGET_DB for load simulation"
+	@echo "  make load-query             - run SQL query burst (TARGET_DB)"
+	@echo "  make load-http              - run HTTP burst against API (TARGET_DB)"
+	@echo "  make load-lock-holder       - hold row lock in TARGET_DB (run in one terminal)"
+	@echo "  make load-lock-waiter       - wait on row lock in TARGET_DB (run in another terminal)"
 	@echo ""
 	@echo "Variables:"
 	@echo "  QUERY_ITERATIONS=$(QUERY_ITERATIONS)"
 	@echo "  HTTP_REQUESTS=$(HTTP_REQUESTS)"
 	@echo "  BASE_URL=$(BASE_URL)"
 	@echo "  LOCK_SECONDS=$(LOCK_SECONDS)"
+	@echo "  TARGET_DB=$(TARGET_DB)"
+	@echo "  TARGET_PG_DSN=$(TARGET_PG_DSN)"
+	@echo "  COMPOSE_DB_SERVICE=$(COMPOSE_DB_SERVICE)"
 	@echo "  SERVICES are inferred from extra args, e.g. 'make logs api'"
 
 up:
@@ -60,19 +68,19 @@ test-integration:
 	uv run pytest -q --run-integration
 
 load-setup:
-	./tools/load-sim/setup.sh
+	TARGET_PG_DSN="$(TARGET_PG_DSN)" COMPOSE_DB_SERVICE="$(COMPOSE_DB_SERVICE)" ./tools/load-sim/setup.sh $(TARGET_DB)
 
 load-query:
-	./tools/load-sim/query-burst.sh $(QUERY_ITERATIONS)
+	TARGET_PG_DSN="$(TARGET_PG_DSN)" COMPOSE_DB_SERVICE="$(COMPOSE_DB_SERVICE)" ./tools/load-sim/query-burst.sh $(QUERY_ITERATIONS) $(TARGET_DB)
 
 load-http:
-	./tools/load-sim/http-burst.sh $(HTTP_REQUESTS) $(BASE_URL)
+	TARGET_DB="$(TARGET_DB)" TARGET_DB_IDENTIFIER="$(TARGET_DB_IDENTIFIER)" ./tools/load-sim/http-burst.sh $(HTTP_REQUESTS) $(BASE_URL) $(LOAD_HTTP_TARGET)
 
 load-lock-holder:
-	./tools/load-sim/lock-holder.sh $(LOCK_SECONDS)
+	TARGET_PG_DSN="$(TARGET_PG_DSN)" COMPOSE_DB_SERVICE="$(COMPOSE_DB_SERVICE)" ./tools/load-sim/lock-holder.sh $(LOCK_SECONDS) $(TARGET_DB)
 
 load-lock-waiter:
-	./tools/load-sim/lock-waiter.sh
+	TARGET_PG_DSN="$(TARGET_PG_DSN)" COMPOSE_DB_SERVICE="$(COMPOSE_DB_SERVICE)" ./tools/load-sim/lock-waiter.sh $(TARGET_DB)
 
 # Treat extra make goals as service names (for example: make logs api).
 $(SERVICES):
