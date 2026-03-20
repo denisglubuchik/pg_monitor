@@ -28,78 +28,28 @@
 - Динамика деградации и рост блокировок/долгих транзакций.
 - Быстрый переход от проблем на графике к конкретному `queryid` и логам.
 
-## Минимум для дашбордов
+## Запуск
+### Docker compose (полный стек observability)
 
-1. Overview:
-   - active connections
-   - deadlocks
-   - blocked sessions
-   - longest transaction
-2. Query Analytics (за период):
-   - top queries by total time (delta за период)
-   - top by calls
-   - latency динамика
-   - эта неделя vs предыдущая
-3. Logs panel (Loki):
-   - ошибки/таймауты/lock wait рядом с метриками
+```bash
+make up
+```
 
-## Алерты MVP
+После запуска:
+- API: `http://localhost:8000`
+- Prometheus: `http://localhost:9090` (`Status -> Targets` для проверки scrape)
+- Alertmanager: `http://localhost:9093`
+- Loki: `http://localhost:3100/ready`
+- Grafana: `http://localhost:3000` (`admin/admin`)
 
-- высокая средняя latency запросов
-- blocked sessions
-- long transaction выше порога
-- рост deadlocks
-- высокая утилизация соединений
+Быстрые проверки локального стека:
 
-## Статус
-
-Текущий статус (2026-03-17):
-- Итерация 1 завершена.
-- Итерация 2 завершена:
-  - реализован collector (`pg_stat_*`);
-  - API и collector вынесены в отдельные процессы;
-  - добавлены split settings (`ApiSettings` / `CollectorSettings`);
-  - добавлен startup retry/backoff для collector worker.
-- Итерация 3 завершена:
-  - реализованы storage (`SQLAlchemy ORM`) + миграции (`Alembic`);
-  - реализованы endpoint'ы query analytics:
-    - `GET /analytics/queries/weekly-top`;
-    - `GET /analytics/queries/week-over-week`;
-  - collector сохраняет query snapshots в storage DB;
-  - локальный docker-профиль обновлен:
-    - один `PostgreSQL` инстанс с двумя БД;
-    - отдельный сервис `migrator` с `alembic upgrade head`.
-- Итерация 4 завершена:
-  - реализован runtime storage path для `/metrics`;
-  - реализован endpoint `GET /metrics` (runtime + service metrics);
-  - в docker compose добавлен `prometheus` для scrape API;
-  - добавлены preflight checks и job timeouts в collector scheduler.
-- Итерация 5 завершена:
-  - добавлены инфраструктурные конфиги для `Alertmanager` и `Grafana`;
-  - добавлены Prometheus alert rules (`docker/prometheus/alerts.yml`);
-  - добавлен provisioning dashboards/datasources для Grafana;
-  - добавлены и стабилизированы dashboards:
-    - `Overview v2` (runtime + lock + TPS/cache/rollback signals, переменные `db_identifier`/`datname`);
-    - `Query Analytics` (SQL-based top queries + window coverage из storage DB);
-  - endpoint'ы query analytics расширены параметрами окна:
-    - `window_start_at`;
-    - `window_end_at`;
-  - Telegram routing переведен на env-only конфигурацию:
-    - секреты не хранятся в `docker/alertmanager/alertmanager.yml`;
-    - значения `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` подставляются в runtime при старте `alertmanager`;
-  - локальный compose smoke-check пройден (`make up`, `make ps`, readiness Alertmanager, проверка `Prometheus -> Alertmanager`);
-  - детальный план: `docs/iteration-5-plan.md`.
-- Итерация 6 завершена:
-  - в docker compose добавлены `loki` и `promtail`;
-  - включен provisioning datasource `Loki` (`uid=loki`) в Grafana;
-  - dashboard `Overview` дополнен logs panel и прямой ссылкой в `Explore`;
-  - добавлен dashboard `Service Metrics`:
-    - `pg_monitor_http_*` (throughput, error ratio, p95 latency, route-level panels);
-    - `process_*` и `python_gc_*`;
-    - фильтры `method` / `path` + лог-фильтры `service` / `level`;
-    - drilldown link в `Explore` Loki с сохранением диапазона времени;
-  - runbook расследования обновлен в `docs/logging-correlation.md`;
-  - детальный план: `docs/iteration-6-plan.md`.
+```bash
+make ps
+curl -fsS http://localhost:9093/-/ready
+curl -fsS http://localhost:9090/api/v1/alertmanagers
+curl -fsS http://localhost:3100/ready
+```
 
 ## Query Analytics API
 
@@ -128,53 +78,6 @@
   - если окно передано, `current_week` берется из переданного диапазона, `previous_week` строится как предыдущий диапазон той же длины;
   - если передан только один параметр окна, возвращается `422`.
 
-## Документация
-
-- Полная спецификация MVP: `docs/mvp-spec.md`
-- Архитектурное предложение: `docs/architecture.md`
-- Пошаговый roadmap MVP: `docs/roadmap.md`
-- Детальный план итерации 3: `docs/iteration-3-plan.md`
-- Архитектура итерации 3: `docs/iteration-3-architecture.md`
-- Детальный план итерации 4: `docs/iteration-4-plan.md`
-- Архитектура итерации 4: `docs/iteration-4-architecture.md`
-- Детальный план итерации 5: `docs/iteration-5-plan.md`
-- Архитектура итерации 5: `docs/iteration-5-architecture.md`
-- Корреляция логов: `docs/logging-correlation.md`
-- Правила совместной работы: `docs/working-agreement.md`
-
-## Quick Start (на текущем этапе)
-
-```bash
-uv sync
-export PG_MONITOR_PG_DSN='postgresql://user:password@localhost:5432/postgres'
-# API процесс:
-uv run uvicorn pg_monitor.app:create_app --factory --host 0.0.0.0 --port 8000
-# Collector worker процесс:
-uv run pg-monitor-collector
-```
-
-Локальный docker-профиль (итерации 3-5):
-
-```bash
-make up
-```
-
-После запуска:
-- API: `http://localhost:8000`
-- Prometheus: `http://localhost:9090` (`Status -> Targets` для проверки scrape)
-- Alertmanager: `http://localhost:9093`
-- Loki: `http://localhost:3100/ready`
-- Grafana: `http://localhost:3000` (`admin/admin`)
-
-Быстрые проверки локального стека:
-
-```bash
-make ps
-curl -fsS http://localhost:9093/-/ready
-curl -fsS http://localhost:9090/api/v1/alertmanagers
-curl -fsS http://localhost:3100/ready
-```
-
 Текущий источник данных для панелей:
 - `Overview` читает Prometheus runtime/service метрики.
 - `Query Analytics` таблицы читают storage PostgreSQL datasource (`pg_monitor_storage`).
@@ -184,62 +87,3 @@ curl -fsS http://localhost:3100/ready
 Набор скриптов для ручной генерации нагрузки:
 - `tools/load-sim/README.md`
 - быстрый старт: `./tools/load-sim/setup.sh && ./tools/load-sim/query-burst.sh 1000`
-
-## Тесты
-
-Быстрый запуск (без интеграционных тестов):
-
-```bash
-pytest -q
-```
-
-Интеграционные тесты запускаются только явно:
-
-```bash
-pytest -q --run-integration
-```
-
-## Конфиг (.env + env)
-
-Приоритет источников:
-`defaults < .env < OS env`.
-
-Готовые шаблоны:
-- `.env.example`
-
-Обязательный параметр:
-- `PG_MONITOR_PG_DSN` (в `.env` или OS env)
-- `PG_MONITOR_STORAGE_DSN` (в `.env` или OS env)
-
-Ключевые параметры collector:
-- `PG_MONITOR_RUNTIME_POLL_INTERVAL_SECONDS`
-- `PG_MONITOR_QUERY_POLL_INTERVAL_SECONDS`
-- `PG_MONITOR_COLLECTOR_STARTUP_RETRY_ATTEMPTS`
-- `PG_MONITOR_COLLECTOR_STARTUP_RETRY_BASE_DELAY_SECONDS`
-- `PG_MONITOR_COLLECTOR_STARTUP_RETRY_MAX_DELAY_SECONDS`
-
-Параметры alerting:
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
-
-Важно по безопасности:
-- не храните Telegram token/chat_id в `docker/alertmanager/alertmanager.yml` и в git;
-- `docker/alertmanager/alertmanager.yml` используется как шаблон, значения подставляются в runtime из env при старте `alertmanager`.
-
-## Ключевой механизм “за период”
-
-`pg_stat_statements` хранит накопленные счетчики.
-Чтобы получить честные метрики за произвольный период, используем:
-
-1. регулярные снапшоты,
-2. выбор `t_start` и `t_end`,
-3. расчет дельт между снапшотами.
-
-## Принципы реализации
-
-- Небольшие итерации.
-- Сначала тесты, потом код.
-- Без overengineering.
-- Каждая фича: план -> согласование -> реализация.
-- Все неясности уточняются до начала реализации.
-- Все ключевые решения согласуются до внесения изменений.
