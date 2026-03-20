@@ -8,6 +8,7 @@ from pg_monitor.logging import reset_request_id, set_request_id
 from pg_monitor.metrics import service_metrics
 
 REQUEST_ID_HEADER = "X-Request-ID"
+UNMATCHED_ROUTE_LABEL = "/__unmatched__"
 _logger = logging.getLogger("pg_monitor.api")
 
 
@@ -75,4 +76,4 @@ def _resolve_metrics_path(request) -> str:
         route_path = getattr(route, "path", None)
         if route_path:
             return str(route_path)
-    return request.url.path
+    return UNMATCHED_ROUTE_LABEL

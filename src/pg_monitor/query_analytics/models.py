@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from .errors import QueryAnalyticsValidationError
+
 if TYPE_CHECKING:
     from datetime import datetime
 
@@ -19,8 +21,18 @@ class PeriodWindow:
     end_at: datetime
 
     def __post_init__(self) -> None:
+        if self.start_at.tzinfo is None or self.start_at.utcoffset() is None:
+            raise QueryAnalyticsValidationError(
+                "period window start_at must be timezone-aware"
+            )
+        if self.end_at.tzinfo is None or self.end_at.utcoffset() is None:
+            raise QueryAnalyticsValidationError(
+                "period window end_at must be timezone-aware"
+            )
         if self.start_at >= self.end_at:
-            raise ValueError("period window start_at must be before end_at")
+            raise QueryAnalyticsValidationError(
+                "period window start_at must be before end_at"
+            )
 
 
 @dataclass(frozen=True, slots=True)

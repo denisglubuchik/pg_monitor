@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from pg_monitor.api.middleware import UNMATCHED_ROUTE_LABEL
 from pg_monitor.metrics import (
     RuntimeDatabaseMetrics,
     RuntimeMetricsService,
@@ -120,3 +121,32 @@ def test_metrics_endpoint_includes_service_http_metrics(
     assert metrics_response.status_code == 200
     assert "pg_monitor_http_requests_total" in metrics_response.text
     assert 'path="/healthz"' in metrics_response.text
+
+
+def test_metrics_endpoint_normalizes_unmatched_paths(
+    client,
+    monkeypatch,
+) -> None:
+    async def fake_get_metrics_state(
+        self: RuntimeMetricsService,
+        *,
+        db_identifier: str | None = None,
+    ) -> list[RuntimeMetricsState]:
+        del self, db_identifier
+        return []
+
+    monkeypatch.setattr(
+        RuntimeMetricsService,
+        "get_metrics_state",
+        fake_get_metrics_state,
+    )
+
+    assert client.get("/not-found-a").status_code == 404
+    assert client.get("/not-found-b").status_code == 404
+
+    metrics_response = client.get("/metrics")
+
+    assert metrics_response.status_code == 200
+    assert f'path="{UNMATCHED_ROUTE_LABEL}"' in metrics_response.text
+    assert 'path="/not-found-a"' not in metrics_response.text
+    assert 'path="/not-found-b"' not in metrics_response.text

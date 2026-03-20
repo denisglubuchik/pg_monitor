@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from fastapi.responses import JSONResponse
 
+from pg_monitor.query_analytics.errors import QueryAnalyticsValidationError
 from pg_monitor.storage import StorageError
 
 if TYPE_CHECKING:
@@ -14,6 +15,25 @@ logger = logging.getLogger("pg_monitor.api.exceptions")
 
 
 def register_exception_handlers(app: FastAPI) -> None:
+    @app.exception_handler(QueryAnalyticsValidationError)
+    async def handle_query_analytics_validation_error(
+        request: Request,
+        exc: QueryAnalyticsValidationError,
+    ) -> JSONResponse:
+        logger.warning(
+            "query_analytics_validation_error",
+            extra={
+                "component": "api",
+                "method": request.method,
+                "path": request.url.path,
+                "error_type": exc.__class__.__name__,
+            },
+        )
+        return JSONResponse(
+            status_code=422,
+            content={"detail": str(exc)},
+        )
+
     @app.exception_handler(StorageError)
     async def handle_storage_error(
         request: Request,
@@ -30,24 +50,5 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
         return JSONResponse(
             status_code=503,
-            content={"detail": "query analytics storage is unavailable"},
-        )
-
-    @app.exception_handler(ValueError)
-    async def handle_value_error(
-        request: Request,
-        exc: ValueError,
-    ) -> JSONResponse:
-        logger.warning(
-            "validation_value_error",
-            extra={
-                "component": "api",
-                "method": request.method,
-                "path": request.url.path,
-                "error_type": exc.__class__.__name__,
-            },
-        )
-        return JSONResponse(
-            status_code=400,
-            content={"detail": str(exc)},
+            content={"detail": "storage is unavailable"},
         )

@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Protocol, Self
 
 from .delta import build_query_deltas
+from .errors import QueryAnalyticsValidationError
 from .models import (
     PeriodTopQueriesResult,
     PeriodWindow,
@@ -80,6 +81,7 @@ class QueryAnalyticsService:
         window_end_at: datetime | None = None,
         now: datetime | None = None,
     ) -> WeekOverWeekQueriesResult:
+        _validate_period_request(db_identifier=db_identifier, limit=limit)
         current_window = _resolve_current_window(
             window_start_at=window_start_at,
             window_end_at=window_end_at,
@@ -89,16 +91,36 @@ class QueryAnalyticsService:
         window_end = current_window.end_at
         duration = window_end - current_start
         previous_start = current_start - duration
+        previous_window = PeriodWindow(
+            start_at=previous_start,
+            end_at=current_start,
+        )
 
-        current_week = await self.get_period_top_queries(
+        points = await self._load_snapshot_points(
+            db_identifier=db_identifier,
+            timestamps=[
+                previous_window.start_at,
+                previous_window.end_at,
+                current_window.end_at,
+            ],
+        )
+        previous_start_point = points[previous_window.start_at]
+        boundary_point = points[previous_window.end_at]
+        current_end_point = points[current_window.end_at]
+
+        current_week = _build_period_result(
             db_identifier=db_identifier,
             window=current_window,
+            start_point=boundary_point,
+            end_point=current_end_point,
             limit=limit,
             sort_by=sort_by,
         )
-        previous_week = await self.get_period_top_queries(
+        previous_week = _build_period_result(
             db_identifier=db_identifier,
-            window=PeriodWindow(start_at=previous_start, end_at=current_start),
+            window=previous_window,
+            start_point=previous_start_point,
+            end_point=boundary_point,
             limit=limit,
             sort_by=sort_by,
         )
@@ -118,42 +140,50 @@ class QueryAnalyticsService:
         limit: int = 20,
         sort_by: QuerySortBy = QuerySortBy.TOTAL_EXEC_TIME_MS,
     ) -> PeriodTopQueriesResult:
-        if limit <= 0:
-            raise ValueError("limit must be greater than 0")
-        if not db_identifier:
-            raise ValueError("db_identifier is required")
-
-        async with self._uow_factory() as uow:
-            start_point = (
-                await uow.query_snapshots.get_latest_snapshot_at_or_before(
-                    db_identifier=db_identifier,
-                    ts=window.start_at,
-                )
-            )
-            end_point = (
-                await uow.query_snapshots.get_latest_snapshot_at_or_before(
-                    db_identifier=db_identifier,
-                    ts=window.end_at,
-                )
-            )
-
-        deltas = build_query_deltas(start_point, end_point)
-        sorted_deltas = _sort_deltas(deltas, sort_by=sort_by)
-        limited = sorted_deltas[:limit]
-
-        return PeriodTopQueriesResult(
+        _validate_period_request(db_identifier=db_identifier, limit=limit)
+        points = await self._load_snapshot_points(
+            db_identifier=db_identifier,
+            timestamps=[window.start_at, window.end_at],
+        )
+        return _build_period_result(
             db_identifier=db_identifier,
             window=window,
-            snapshot_start_at=None
-            if start_point is None
-            else start_point.captured_at,
-            snapshot_end_at=None
-            if end_point is None
-            else end_point.captured_at,
-            sort_by=sort_by,
+            start_point=points[window.start_at],
+            end_point=points[window.end_at],
             limit=limit,
-            items=limited,
+            sort_by=sort_by,
         )
+
+    async def _load_snapshot_points(
+        self,
+        *,
+        db_identifier: str,
+        timestamps: list[datetime],
+    ) -> dict[datetime, QuerySnapshotPoint | None]:
+        ordered_unique = list(dict.fromkeys(timestamps))
+        async with self._uow_factory() as uow:
+            reader = uow.query_snapshots
+            bulk_loader = getattr(
+                reader,
+                "get_latest_snapshots_at_or_before",
+                None,
+            )
+            if callable(bulk_loader):
+                loaded = await bulk_loader(
+                    db_identifier=db_identifier,
+                    timestamps=ordered_unique,
+                )
+                return {ts: loaded.get(ts) for ts in ordered_unique}
+
+            points: dict[datetime, QuerySnapshotPoint | None] = {}
+            for ts in ordered_unique:
+                points[ts] = (
+                    await reader.get_latest_snapshot_at_or_before(
+                        db_identifier=db_identifier,
+                        ts=ts,
+                    )
+                )
+            return points
 
 
 def _sort_deltas(
@@ -187,7 +217,7 @@ def _resolve_current_window(
     now: datetime | None,
 ) -> PeriodWindow:
     if (window_start_at is None) != (window_end_at is None):
-        raise ValueError(
+        raise QueryAnalyticsValidationError(
             "window_start_at and window_end_at must be provided together"
         )
 
@@ -197,3 +227,36 @@ def _resolve_current_window(
     resolved_end = now or datetime.now(UTC)
     resolved_start = resolved_end - timedelta(days=7)
     return PeriodWindow(start_at=resolved_start, end_at=resolved_end)
+
+
+def _validate_period_request(*, db_identifier: str, limit: int) -> None:
+    if limit <= 0:
+        raise QueryAnalyticsValidationError("limit must be greater than 0")
+    if not db_identifier:
+        raise QueryAnalyticsValidationError("db_identifier is required")
+
+
+def _build_period_result(
+    *,
+    db_identifier: str,
+    window: PeriodWindow,
+    start_point: QuerySnapshotPoint | None,
+    end_point: QuerySnapshotPoint | None,
+    limit: int,
+    sort_by: QuerySortBy,
+) -> PeriodTopQueriesResult:
+    deltas = build_query_deltas(start_point, end_point)
+    sorted_deltas = _sort_deltas(deltas, sort_by=sort_by)
+    limited = sorted_deltas[:limit]
+
+    return PeriodTopQueriesResult(
+        db_identifier=db_identifier,
+        window=window,
+        snapshot_start_at=(
+            None if start_point is None else start_point.captured_at
+        ),
+        snapshot_end_at=None if end_point is None else end_point.captured_at,
+        sort_by=sort_by,
+        limit=limit,
+        items=limited,
+    )

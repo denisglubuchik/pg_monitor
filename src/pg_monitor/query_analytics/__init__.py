@@ -1,3 +1,4 @@
+from .errors import QueryAnalyticsValidationError
 from .models import (
     PeriodTopQueriesResult,
     PeriodWindow,
@@ -11,8 +12,8 @@ __all__ = [
     "PeriodTopQueriesResult",
     "PeriodWindow",
     "QueryAnalyticsService",
+    "QueryAnalyticsValidationError",
     "QueryDelta",
     "QuerySortBy",
     "WeekOverWeekQueriesResult",
 ]
-

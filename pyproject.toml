@@ -19,6 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
+pg-monitor-api = "pg_monitor.app:run"
 pg-monitor-collector = "pg_monitor.collector.worker:run"
 
 [dependency-groups]

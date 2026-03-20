@@ -52,6 +52,18 @@ def build_query_deltas(
         ):
             continue
 
+        # When snapshot boundaries collapse to the same point, all deltas are 0.
+        if (
+            calls_delta == 0
+            and total_exec_time_ms_delta == 0
+            and rows_delta == 0
+            and shared_blks_hit_delta == 0
+            and shared_blks_read_delta == 0
+            and shared_blks_dirtied_delta == 0
+            and shared_blks_written_delta == 0
+        ):
+            continue
+
         mean_exec_time_ms_delta = (
             total_exec_time_ms_delta / calls_delta if calls_delta > 0 else None
         )

@@ -54,14 +54,14 @@ class QueryMetricSnapshotOrm(Base):
     dbid: Mapped[int] = mapped_column(Integer, nullable=False)
     userid: Mapped[int] = mapped_column(Integer, nullable=False)
     query: Mapped[str] = mapped_column(String, nullable=False)
-    calls: Mapped[int] = mapped_column(Integer, nullable=False)
+    calls: Mapped[int] = mapped_column(BigInteger, nullable=False)
     total_exec_time_ms: Mapped[float] = mapped_column(Float, nullable=False)
     mean_exec_time_ms: Mapped[float] = mapped_column(Float, nullable=False)
-    rows: Mapped[int] = mapped_column(Integer, nullable=False)
-    shared_blks_hit: Mapped[int] = mapped_column(Integer, nullable=False)
-    shared_blks_read: Mapped[int] = mapped_column(Integer, nullable=False)
-    shared_blks_dirtied: Mapped[int] = mapped_column(Integer, nullable=False)
-    shared_blks_written: Mapped[int] = mapped_column(Integer, nullable=False)
+    rows: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    shared_blks_hit: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    shared_blks_read: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    shared_blks_dirtied: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    shared_blks_written: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
 
 class RuntimeSnapshotOrm(Base):

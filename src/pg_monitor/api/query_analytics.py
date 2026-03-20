@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as dt  # noqa: TC003
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
 from pg_monitor.api.schemas import (
     PeriodTopQueriesResponse,
@@ -29,16 +29,13 @@ async def get_weekly_top_queries(
     window_start_at: dt.datetime | None = Query(default=None),
     window_end_at: dt.datetime | None = Query(default=None),
 ) -> PeriodTopQueriesResponse:
-    try:
-        result = await service.get_weekly_top_queries(
-            db_identifier=db_identifier,
-            limit=limit,
-            sort_by=sort_by,
-            window_start_at=window_start_at,
-            window_end_at=window_end_at,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    result = await service.get_weekly_top_queries(
+        db_identifier=db_identifier,
+        limit=limit,
+        sort_by=sort_by,
+        window_start_at=window_start_at,
+        window_end_at=window_end_at,
+    )
     return to_period_response(result)
 
 
@@ -51,14 +48,11 @@ async def get_week_over_week_queries(
     window_start_at: dt.datetime | None = Query(default=None),
     window_end_at: dt.datetime | None = Query(default=None),
 ) -> WeekOverWeekQueriesResponse:
-    try:
-        result = await service.get_week_over_week_queries(
-            db_identifier=db_identifier,
-            limit=limit,
-            sort_by=sort_by,
-            window_start_at=window_start_at,
-            window_end_at=window_end_at,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    result = await service.get_week_over_week_queries(
+        db_identifier=db_identifier,
+        limit=limit,
+        sort_by=sort_by,
+        window_start_at=window_start_at,
+        window_end_at=window_end_at,
+    )
     return to_week_over_week_response(result)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt  # noqa: TC003
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
@@ -10,6 +11,11 @@ if TYPE_CHECKING:
         PeriodTopQueriesResult,
         WeekOverWeekQueriesResult,
     )
+
+
+class QuerySortByResponse(StrEnum):
+    TOTAL_EXEC_TIME_MS = "total_exec_time_ms_delta"
+    CALLS = "calls_delta"
 
 
 class QueryDeltaResponse(BaseModel):
@@ -33,14 +39,14 @@ class PeriodTopQueriesResponse(BaseModel):
     window_end_at: dt.datetime
     snapshot_start_at: dt.datetime | None
     snapshot_end_at: dt.datetime | None
-    sort_by: str
+    sort_by: QuerySortByResponse
     limit: int
     items: list[QueryDeltaResponse] = Field(default_factory=list)
 
 
 class WeekOverWeekQueriesResponse(BaseModel):
     db_identifier: str
-    sort_by: str
+    sort_by: QuerySortByResponse
     limit: int
     current_week: PeriodTopQueriesResponse
     previous_week: PeriodTopQueriesResponse
@@ -55,7 +61,7 @@ def to_period_response(
         window_end_at=result.window.end_at,
         snapshot_start_at=result.snapshot_start_at,
         snapshot_end_at=result.snapshot_end_at,
-        sort_by=str(result.sort_by),
+        sort_by=QuerySortByResponse(result.sort_by.value),
         limit=result.limit,
         items=[
             QueryDeltaResponse(
@@ -82,7 +88,7 @@ def to_week_over_week_response(
 ) -> WeekOverWeekQueriesResponse:
     return WeekOverWeekQueriesResponse(
         db_identifier=result.db_identifier,
-        sort_by=str(result.sort_by),
+        sort_by=QuerySortByResponse(result.sort_by.value),
         limit=result.limit,
         current_week=to_period_response(result.current_week),
         previous_week=to_period_response(result.previous_week),

@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from prometheus_client import generate_latest
+
 from pg_monitor.metrics import (
     RuntimeDatabaseMetrics,
     RuntimeMetricsExporter,
     RuntimeMetricsState,
 )
+from pg_monitor.metrics.api_service_metrics import service_metrics
 
 
 def test_exporter_renders_runtime_metrics() -> None:
@@ -43,3 +46,9 @@ def test_exporter_renders_runtime_metrics() -> None:
     assert "pg_monitor_runtime_db_deadlocks" in payload
     assert 'db_identifier="postgres@127.0.0.1:5432"' in payload
     assert 'datname="postgres"' in payload
+
+
+def test_exporter_keeps_runtime_metrics_outside_service_registry() -> None:
+    RuntimeMetricsExporter()
+    payload = generate_latest(service_metrics.registry).decode("utf-8")
+    assert "pg_monitor_runtime_active_connections" not in payload

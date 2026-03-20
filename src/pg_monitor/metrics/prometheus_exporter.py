@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from .runtime_models import RuntimeMetricsState
 
 try:
-    from prometheus_client import Gauge, generate_latest
+    from prometheus_client import CollectorRegistry, Gauge, generate_latest
     from prometheus_client.exposition import CONTENT_TYPE_LATEST
 
     _PROMETHEUS_CLIENT_AVAILABLE = True
@@ -20,8 +20,7 @@ from .api_service_metrics import service_metrics
 
 
 class _RuntimeGaugeSet:
-    def __init__(self) -> None:
-        registry = service_metrics.registry
+    def __init__(self, registry: CollectorRegistry) -> None:
         self.active_connections = Gauge(
             "pg_monitor_runtime_active_connections",
             "Active PostgreSQL connections from pg_stat_activity.",
@@ -96,20 +95,9 @@ class _RuntimeGaugeSet:
         )
 
 
-_RUNTIME_GAUGES: _RuntimeGaugeSet | None = None
-
-
 class RuntimeMetricsExporter:
     def __init__(self) -> None:
-        if not _PROMETHEUS_CLIENT_AVAILABLE:
-            return
-
-        global _RUNTIME_GAUGES
-        if _RUNTIME_GAUGES is None:
-            _RUNTIME_GAUGES = _RuntimeGaugeSet()
-
-        self._registry = service_metrics.registry
-        self._gauges = _RUNTIME_GAUGES
+        pass
 
     def render(
         self,
@@ -130,26 +118,27 @@ class RuntimeMetricsExporter:
         states: list["RuntimeMetricsState"],
         observed_at: "datetime",
     ) -> str:
-        self._clear_gauges()
+        runtime_registry = CollectorRegistry(auto_describe=True)
+        gauges = _RuntimeGaugeSet(runtime_registry)
 
         for state in states:
             labels = {"db_identifier": state.db_identifier}
-            self._gauges.active_connections.labels(**labels).set(
+            gauges.active_connections.labels(**labels).set(
                 state.active_connections
             )
-            self._gauges.blocked_sessions.labels(**labels).set(
+            gauges.blocked_sessions.labels(**labels).set(
                 state.blocked_sessions
             )
-            self._gauges.longest_tx.labels(**labels).set(
+            gauges.longest_tx.labels(**labels).set(
                 state.longest_tx_duration_s or 0.0
             )
-            self._gauges.waiting_locks.labels(**labels).set(
+            gauges.waiting_locks.labels(**labels).set(
                 state.waiting_locks
             )
-            self._gauges.granted_locks.labels(**labels).set(
+            gauges.granted_locks.labels(**labels).set(
                 state.granted_locks
             )
-            self._gauges.snapshot_age.labels(**labels).set(
+            gauges.snapshot_age.labels(**labels).set(
                 max((observed_at - state.captured_at).total_seconds(), 0.0)
             )
 
@@ -158,34 +147,24 @@ class RuntimeMetricsExporter:
                     "db_identifier": state.db_identifier,
                     "datname": db.datname,
                 }
-                self._gauges.db_numbackends.labels(**db_labels).set(
+                gauges.db_numbackends.labels(**db_labels).set(
                     db.numbackends
                 )
-                self._gauges.db_xact_commit.labels(**db_labels).set(
+                gauges.db_xact_commit.labels(**db_labels).set(
                     db.xact_commit
                 )
-                self._gauges.db_xact_rollback.labels(**db_labels).set(
+                gauges.db_xact_rollback.labels(**db_labels).set(
                     db.xact_rollback
                 )
-                self._gauges.db_blks_read.labels(**db_labels).set(db.blks_read)
-                self._gauges.db_blks_hit.labels(**db_labels).set(db.blks_hit)
-                self._gauges.db_deadlocks.labels(**db_labels).set(db.deadlocks)
+                gauges.db_blks_read.labels(**db_labels).set(db.blks_read)
+                gauges.db_blks_hit.labels(**db_labels).set(db.blks_hit)
+                gauges.db_deadlocks.labels(**db_labels).set(db.deadlocks)
 
-        return generate_latest(self._registry).decode("utf-8")
-
-    def _clear_gauges(self) -> None:
-        self._gauges.active_connections.clear()
-        self._gauges.blocked_sessions.clear()
-        self._gauges.longest_tx.clear()
-        self._gauges.waiting_locks.clear()
-        self._gauges.granted_locks.clear()
-        self._gauges.snapshot_age.clear()
-        self._gauges.db_numbackends.clear()
-        self._gauges.db_xact_commit.clear()
-        self._gauges.db_xact_rollback.clear()
-        self._gauges.db_blks_read.clear()
-        self._gauges.db_blks_hit.clear()
-        self._gauges.db_deadlocks.clear()
+        runtime_payload = generate_latest(runtime_registry).decode("utf-8")
+        service_payload = generate_latest(service_metrics.registry).decode(
+            "utf-8"
+        )
+        return _merge_prometheus_payloads(runtime_payload, service_payload)
 
 
 def _render_fallback(
@@ -281,3 +260,10 @@ def _escape_label(value: str) -> str:
     escaped = value.replace("\\", "\\\\")
     escaped = escaped.replace("\n", "\\n")
     return escaped.replace('"', '\\"')
+
+
+def _merge_prometheus_payloads(*payloads: str) -> str:
+    chunks = [item.rstrip("\n") for item in payloads if item.strip()]
+    if not chunks:
+        return "\n"
+    return "\n".join(chunks) + "\n"

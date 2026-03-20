@@ -20,6 +20,7 @@ class FakeQuerySnapshotRepository:
         points: dict[datetime, QuerySnapshotPoint | None],
     ) -> None:
         self._points = points
+        self.bulk_calls: list[list[datetime]] = []
 
     async def get_latest_snapshot_at_or_before(
         self,
@@ -29,6 +30,16 @@ class FakeQuerySnapshotRepository:
     ) -> QuerySnapshotPoint | None:
         del db_identifier
         return self._points.get(ts)
+
+    async def get_latest_snapshots_at_or_before(
+        self,
+        *,
+        db_identifier: str,
+        timestamps: list[datetime],
+    ) -> dict[datetime, QuerySnapshotPoint | None]:
+        del db_identifier
+        self.bulk_calls.append(timestamps)
+        return {ts: self._points.get(ts) for ts in timestamps}
 
 
 class FakeUnitOfWork:
@@ -268,5 +279,109 @@ def test_weekly_top_queries_requires_full_window_pair() -> None:
             service.get_weekly_top_queries(
                 db_identifier="postgres@127.0.0.1:5432",
                 window_start_at=datetime(2026, 3, 1, 0, 0, tzinfo=UTC),
+            )
+        )
+
+
+def test_period_top_queries_skips_zero_delta_rows() -> None:
+    start_at = datetime(2026, 3, 1, 0, 0, tzinfo=UTC)
+    end_at = datetime(2026, 3, 8, 0, 0, tzinfo=UTC)
+    same_point = QuerySnapshotPoint(
+        captured_at=end_at,
+        rows=[
+            _make_row(
+                captured_at=end_at,
+                queryid="q1",
+                calls=10,
+                total_exec_time_ms=100.0,
+            )
+        ],
+    )
+    repo = FakeQuerySnapshotRepository(
+        {
+            start_at: same_point,
+            end_at: same_point,
+        }
+    )
+    service = QueryAnalyticsService(FakeUnitOfWorkFactory(repo))
+
+    result = asyncio.run(
+        service.get_period_top_queries(
+            db_identifier="postgres@127.0.0.1:5432",
+            window=PeriodWindow(start_at=start_at, end_at=end_at),
+        )
+    )
+
+    assert result.items == []
+
+
+def test_week_over_week_uses_previous_window_of_same_length() -> None:
+    current_start = datetime(2026, 3, 8, 0, 0, tzinfo=UTC)
+    current_end = datetime(2026, 3, 15, 0, 0, tzinfo=UTC)
+    previous_start = datetime(2026, 3, 1, 0, 0, tzinfo=UTC)
+    previous_end = current_start
+
+    previous_point = QuerySnapshotPoint(
+        captured_at=previous_end,
+        rows=[
+            _make_row(
+                captured_at=previous_end,
+                queryid="q-prev",
+                calls=7,
+                total_exec_time_ms=70.0,
+            )
+        ],
+    )
+    current_point = QuerySnapshotPoint(
+        captured_at=current_end,
+        rows=[
+            _make_row(
+                captured_at=current_end,
+                queryid="q-current",
+                calls=9,
+                total_exec_time_ms=90.0,
+            )
+        ],
+    )
+
+    repo = FakeQuerySnapshotRepository(
+        {
+            previous_start: None,
+            previous_end: previous_point,
+            current_start: previous_point,
+            current_end: current_point,
+        }
+    )
+    service = QueryAnalyticsService(FakeUnitOfWorkFactory(repo))
+
+    result = asyncio.run(
+        service.get_week_over_week_queries(
+            db_identifier="postgres@127.0.0.1:5432",
+            window_start_at=current_start,
+            window_end_at=current_end,
+            sort_by=QuerySortBy.CALLS,
+            limit=10,
+        )
+    )
+
+    assert result.current_week.window.start_at == current_start
+    assert result.current_week.window.end_at == current_end
+    assert result.previous_week.window.start_at == previous_start
+    assert result.previous_week.window.end_at == previous_end
+    assert len(repo.bulk_calls) == 1
+    assert repo.bulk_calls[0] == [previous_start, previous_end, current_end]
+
+
+def test_weekly_top_queries_rejects_naive_window_datetime() -> None:
+    service = QueryAnalyticsService(
+        FakeUnitOfWorkFactory(FakeQuerySnapshotRepository({}))
+    )
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        asyncio.run(
+            service.get_weekly_top_queries(
+                db_identifier="postgres@127.0.0.1:5432",
+                window_start_at=datetime(2026, 3, 1, 0, 0),
+                window_end_at=datetime(2026, 3, 2, 0, 0),
             )
         )
