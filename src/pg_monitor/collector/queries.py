@@ -71,4 +71,9 @@ SELECT
 FROM pg_stat_statements
 WHERE queryid IS NOT NULL
   AND toplevel
+  AND dbid = (
+      SELECT oid
+      FROM pg_database
+      WHERE datname = current_database()
+  )
 """
